@@ -48,7 +48,7 @@ struct HitInfo {
 };
 
 float random(vec2 uv) { 
-	return fract(sin(dot(uv + time * 10.0, vec2(12.9898, 4.1414))) * 43758.5453);
+	return fract(sin(dot(uv * 10.0 + time * 10.0, vec2(12.9898, 4.1414))) * 43758.5453);
 }
 
 mat2 rotate(float angle) {
@@ -84,25 +84,25 @@ HitInfo checkBox(Ray ray, Box box) {
     vec3 m = 1.0 / ray.direction;
     vec3 n = m * delta;
     vec3 k = abs(m) * box.size / 2.0;
-    vec3 t1 = -n -k;
+    vec3 t1 = -n - k;
     vec3 t2 = -n + k;
 
     float tN = max(max(t1.x, t1.y), t1.z);
     float tF = min(min(t2.x, t2.y), t2.z);
 
     if(tN > tF || tF < 0.0) return HitInfo(false, 0.0, 0.0, vec3(0.0), Material(vec3(0.0), 0.0, false));
-    return HitInfo(tN >= 0.0, tN, tF, -sign(ray.direction) * step(t1.yzx, t1.xyz) * step(t1.zxy, t1.xyz), box.material);
+    return HitInfo(tN >= 0.0, tN, tF, step(t1.yzx, t1.xyz) * step(t1.zxy, t1.xyz) * -sign(ray.direction), box.material);
 }
 
 HitInfo raycast(Ray ray) {
     HitInfo nearestInfo = HitInfo(false, 1000000.0, 0.0, vec3(0.0), Material(vec3(0.0), 0.0, false));
 
-    Sphere sphere = Sphere(vec3(0.0, 0.0, 6.0), 1.0, Material(vec3(0.9, 0.0, 0.0), 0.0, false));
+    Sphere sphere = Sphere(vec3(0.0, 0.0, 6.0), 1.0, Material(vec3(0.9, 0.0, 0.0), 0.7, false));
     HitInfo sphereInfo = checkSphere(ray, sphere);
 
     if(sphereInfo.hit && sphereInfo.distance < nearestInfo.distance) nearestInfo = sphereInfo;
 
-    Box box = Box(vec3(-10.0, -1.2, -10.0), vec3(20.0, 0.2, 20.0), Material(vec3(0.8), 0.99, false));
+    Box box = Box(vec3(-10.0, -1.2, -10.0), vec3(20.0, 0.2, 20.0), Material(vec3(0.8), 0.7, false));
     HitInfo boxInfo = checkBox(ray, box);
 
     if(boxInfo.hit && boxInfo.distance < nearestInfo.distance) nearestInfo = boxInfo;
@@ -126,9 +126,9 @@ vec3 raytrace(Ray ray, float randomOffset) {
         float phi = PI * random(ray.direction.xy + ray.direction.z + randomOffset);
 
         vec3 diffuse = vec3(sin(phi) * cos(theta), sin(phi) * sin(theta), cos(phi));
-        diffuse = normalize(diffuse);
+        diffuse = normalize(diffuse * dot(diffuse, raycastInfo.normal));
 
-        ray.direction = mix(reflect(ray.direction, raycastInfo.normal), diffuse, raycastInfo.material.diffuse);
+        ray.direction = normalize(mix(reflect(ray.direction, raycastInfo.normal), diffuse, raycastInfo.material.diffuse));
     }
 
     return vec3(0.0);
@@ -141,7 +141,7 @@ void main() {
     ray.direction.zy *= rotate(-playerRotation.z);
 
     gl_FragColor.a = 1.0;
-    for(int i = 0; i < 256; i++) {
+    for(int i = 0; i < 32; i++) {
         gl_FragColor.rgb += raytrace(ray, i);
     }
 
