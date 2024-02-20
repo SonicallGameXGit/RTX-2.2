@@ -96,15 +96,29 @@ HitInfo checkBox(Ray ray, Box box) {
 HitInfo rayCast(Ray ray) {
     HitInfo hitInfo = HitInfo(false, 1000000.0, 0.0, vec3(0.0), NULL_MATERIAL);
     
-    HitInfo floorHitInfo = checkBox(ray, Box(vec3(-10.0, -1.0, -10.0), vec3(20.0, 1.0, 20.0), Material(vec3(0.8), 0.0)));
+    HitInfo floorHitInfo = checkBox(ray, Box(vec3(-10.0, -1.0, -10.0), vec3(20.0, 1.0, 20.0), Material(vec3(0.8), 0.3)));
     if(floorHitInfo.hit && floorHitInfo.distance < hitInfo.distance) hitInfo = floorHitInfo;
+
+    HitInfo sphereHitInfo = checkSphere(ray, Sphere(vec3(4.0, 1.0, 4.0), 1.0, Material(vec3(1.0, 0.1, 0.2), 0.8)));
+    if(sphereHitInfo.hit && sphereHitInfo.distance < hitInfo.distance) hitInfo = sphereHitInfo;
 
     return hitInfo;
 }
 
 vec3 rayTrace(Ray ray) {
-    HitInfo hitInfo = rayCast(ray);
-    return hitInfo.hit ? hitInfo.material.color : sky(ray);
+    vec3 color = vec3(1.0);
+
+    for(int i = 0; i < 32; i++) {
+        HitInfo hitInfo = rayCast(ray);
+        if(!hitInfo.hit) return color * sky(ray);
+
+        color *= hitInfo.material.color;
+
+        ray.position += ray.direction * (hitInfo.distance - 0.001);
+        ray.direction = reflect(ray.direction, hitInfo.normal);
+    }
+
+    return vec3(0.0);
 }
 
 void main() {

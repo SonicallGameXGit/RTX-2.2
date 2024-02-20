@@ -64,8 +64,8 @@ int main() {
     RTX::Window::initializeImGui(RTX_IMGUI_THEME_CLASSIC);
 
     RTX::ShaderProgram shaderProgram;
-    shaderProgram.addShader(RTX::Shader("res/shaders/raytrace.vs", GL_VERTEX_SHADER));
-    shaderProgram.addShader(RTX::Shader("res/shaders/raytrace.fs", GL_FRAGMENT_SHADER));
+    shaderProgram.addShader(RTX::Shader("res/shaders/raytrace.vert", GL_VERTEX_SHADER));
+    shaderProgram.addShader(RTX::Shader("res/shaders/raytrace.frag", GL_FRAGMENT_SHADER));
     shaderProgram.compile();
 
     RTX::Player player(glm::vec3(), glm::vec3(), glm::vec3(0.4f, 1.76f, 0.4f));
@@ -142,8 +142,8 @@ int main() {
 
             shaderProgram.clear();
             shaderProgram = RTX::ShaderProgram();
-            shaderProgram.addShader(RTX::Shader("res/shaders/raytrace.vs", GL_VERTEX_SHADER));
-            shaderProgram.addShader(RTX::Shader("res/shaders/raytrace.fs", GL_FRAGMENT_SHADER));
+            shaderProgram.addShader(RTX::Shader("res/shaders/raytrace.vert", GL_VERTEX_SHADER));
+            shaderProgram.addShader(RTX::Shader("res/shaders/raytrace.frag", GL_FRAGMENT_SHADER));
             shaderProgram.compile();
         }
 
