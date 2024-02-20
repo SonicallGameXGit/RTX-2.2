@@ -48,6 +48,35 @@ void RTX::Window::close() {
 	glfwTerminate();
 }
 
+void RTX::Window::initializeImGui(unsigned int theme) {
+	IMGUI_CHECKVERSION();
+
+	ImGui::CreateContext();
+
+	if (theme == RTX_IMGUI_THEME_DARK) ImGui::StyleColorsDark();
+	else if (theme == RTX_IMGUI_THEME_LIGHT) ImGui::StyleColorsLight();
+	else if (theme == RTX_IMGUI_THEME_CLASSIC) ImGui::StyleColorsClassic();
+
+	ImGui_ImplGlfw_InitForOpenGL(window, true);
+	ImGui_ImplOpenGL3_Init("#version 120");
+}
+void RTX::Window::beginImGui() {
+	ImGui_ImplOpenGL3_NewFrame();
+	ImGui_ImplGlfw_NewFrame();
+
+	ImGui::NewFrame();
+}
+void RTX::Window::endImGui() {
+	ImGui::Render();
+	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+}
+void RTX::Window::clearImGui() {
+	ImGui_ImplOpenGL3_Shutdown();
+	ImGui_ImplGlfw_Shutdown();
+
+	ImGui::DestroyContext();
+}
+
 bool RTX::Window::isRunning() {
 	return !glfwWindowShouldClose(window);
 }
@@ -64,8 +93,6 @@ GLFWwindow* RTX::Window::getId() {
 }
 
 RTX::Shader::Shader(const char* location, GLenum type) {
-	id = 0;
-
 	std::ifstream stream(location);
 	std::string code{ std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>() };
 
@@ -82,9 +109,7 @@ RTX::Shader::Shader(const char* location, GLenum type) {
 		char log[512];
 
 		glGetShaderInfoLog(id, 512, NULL, log);
-		std::cerr << "Tvoy sheyder polnoe govno! Ispravlyay! Oshibka:\n" + std::string(log) << '\n';
-
-		return;
+		std::cerr << "Tvoy sheyder polnoe govno! Ispravlyay! Oshibka:\n" << log << '\n';
 	}
 }
 
@@ -104,6 +129,8 @@ void RTX::ShaderProgram::addShader(Shader shader) {
 	glAttachShader(id, shader.getId());
 }
 bool RTX::ShaderProgram::compile() {
+	bool success = true;
+
 	glLinkProgram(id);
 
 	int linked = 0;
@@ -113,8 +140,8 @@ bool RTX::ShaderProgram::compile() {
 		char log[512];
 		glGetProgramInfoLog(id, 512, NULL, log);
 
-		std::cerr << "Ono ne shtototam ne linkuetsa pochemuto\nOshibka:\n" + std::string(log) + '\n';
-		return false;
+		std::cerr << "Ono ne shtototam ne linkuetsa pochemuto\nOshibka:\n" << log << '\n';
+		success = false;
 	}
 
 
@@ -127,11 +154,11 @@ bool RTX::ShaderProgram::compile() {
 		char log[512];
 		glGetProgramInfoLog(id, 512, NULL, log);
 
-		std::cerr << "Ne pravilno, dva!\nOshibka:\n" + std::string(log) << '\n';
-		return false;
+		std::cerr << "Ne pravilno, dva!\nOshibka:\n" << log << '\n';
+		success = false;
 	}
 
-	return true;
+	return success;
 }
 
 void RTX::ShaderProgram::load() {

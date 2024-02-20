@@ -3,7 +3,7 @@
 glm::vec2 RTX::Mouse::velocity;
 glm::vec2 RTX::Mouse::lastPosition;
 
-bool RTX::Keyboard::isKeyPressed(int key) {
+bool RTX::Keyboard::isPressed(int key) {
 	return glfwGetKey(RTX::Window::getId(), key) == GLFW_PRESS;
 }
 
@@ -19,6 +19,13 @@ void RTX::Mouse::update() {
 
 void RTX::Mouse::setGrabbed(bool grabbed) {
 	glfwSetInputMode(RTX::Window::getId(), GLFW_CURSOR, grabbed ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
+}
+
+bool RTX::Mouse::isGrabbed() {
+	return glfwGetInputMode(RTX::Window::getId(), GLFW_CURSOR) == GLFW_CURSOR_DISABLED;
+}
+bool RTX::Mouse::isPressed(int button) {
+	return glfwGetMouseButton(RTX::Window::getId(), button) == GLFW_PRESS;
 }
 
 glm::vec2 RTX::Mouse::getVelocity() {

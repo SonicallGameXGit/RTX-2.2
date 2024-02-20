@@ -9,6 +9,13 @@
 #include <string>
 #include <fstream>
 #include <streambuf>
+#include "../imgui/imgui.h"
+#include "../imgui/imgui_impl_glfw.h"
+#include "../imgui/imgui_impl_opengl3.h"
+
+#define RTX_IMGUI_THEME_DARK 0
+#define RTX_IMGUI_THEME_LIGHT 1
+#define RTX_IMGUI_THEME_CLASSIC 2
 
 namespace RTX {
 	class Window {
@@ -16,6 +23,11 @@ namespace RTX {
 		static bool create(int width, int height, const char* title, bool resizable, bool verticalSync);
 		static void update();
 		static void close();
+
+		static void initializeImGui(unsigned int theme);
+		static void beginImGui();
+		static void endImGui();
+		static void clearImGui();
 		
 		static bool isRunning();
 
@@ -27,7 +39,7 @@ namespace RTX {
 
 	class Shader {
 	public:
-		Shader(const char* location, GLenum type);
+		Shader(const char* code, GLenum type);
 		void clear();
 
 		int getId();

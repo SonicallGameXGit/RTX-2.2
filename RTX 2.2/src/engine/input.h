@@ -4,7 +4,7 @@
 namespace RTX {
 	class Keyboard {
 	public:
-		static bool isKeyPressed(int key);
+		static bool isPressed(int key);
 	};
 	class Mouse {
 	public:
@@ -13,6 +13,9 @@ namespace RTX {
 
 		static void setGrabbed(bool grabbed);
 		
+		static bool isGrabbed();
+		static bool isPressed(int button);
+
 		static glm::vec2 getVelocity();
 		static glm::vec2 getPosition();
 	private:
