@@ -141,7 +141,7 @@ void main() {
     ray.direction.zy *= rotate(-playerRotation.z);
 
     gl_FragColor.a = 1.0;
-    for(int i = 0; i < 32; i++) {
+    for(int i = 0; i < 256; i++) {
         gl_FragColor.rgb += raytrace(ray, i);
     }
 
