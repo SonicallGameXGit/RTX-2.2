@@ -59,6 +59,7 @@ namespace RTX {
 		void clear();
 
 		void setUniform(const char* id, float value);
+		void setUniform(const char* id, glm::vec2 value);
 		void setUniform(const char* id, glm::vec3 value);
 	private:
 		int id;

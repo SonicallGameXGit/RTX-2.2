@@ -179,6 +179,9 @@ void RTX::ShaderProgram::clear() {
 void RTX::ShaderProgram::setUniform(const char* id, float value) {
 	glUniform1f(glGetUniformLocation(this->id, id), value);
 }
+void RTX::ShaderProgram::setUniform(const char* id, glm::vec2 value) {
+	glUniform2f(glGetUniformLocation(this->id, id), value.x, value.y);
+}
 void RTX::ShaderProgram::setUniform(const char* id, glm::vec3 value) {
 	glUniform3f(glGetUniformLocation(this->id, id), value.x, value.y, value.z);
 }

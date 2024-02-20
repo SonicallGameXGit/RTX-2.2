@@ -3,7 +3,7 @@
 
 #define SUN_COLOR vec3(1.0, 0.8, 0.6) * 5.0
 #define SUN_RADIUS 0.05
-#define SKY_BRIGHTNESS 0.0
+#define SKY_BRIGHTNESS 0.8
 
 #define NULL_MATERIAL Material(vec3(0.0), 0.0)
 #define NULL_HIT_INFO HitInfo(false, 0.0, 0.0, vec3(0.0), NULL_MATERIAL)
@@ -15,7 +15,8 @@ uniform vec3 playerRotation;
 uniform vec3 sunDirection;
 
 uniform vec2 screenResolution;
-uniform float randomOffset;
+
+uniform float time;
 
 struct Ray {
     vec3 position;
@@ -147,8 +148,11 @@ vec3 rayTrace(Ray ray, inout int seed) {
 
         color *= hitInfo.material.color;
         
+        vec3 diffuse = randomHemisphereVector(seed, hitInfo.normal);
+        vec3 reflected = reflect(ray.direction, hitInfo.normal);
+
         ray.position += ray.direction * hitInfo.distance;
-        ray.direction = mix(reflect(ray.direction, hitInfo.normal), randomHemisphereVector(seed, hitInfo.normal), 1.0);
+        ray.direction = mix(reflected, diffuse, 1.0);
     }
 
     return vec3(0.0);
@@ -156,24 +160,26 @@ vec3 rayTrace(Ray ray, inout int seed) {
 
 vec3 denoise(Ray ray, inout int seed) {
     vec3 color;
-    for(int i = 0; i < 32; i++) {
+    for(int i = 0; i < 8; i++) {
         color += rayTrace(ray, seed);
     }
 
-    return clamp(color / 32.0, vec3(0.0), vec3(1.0));
+    return clamp(color / 8.0, vec3(0.0), vec3(1.0));
 }
 
 out vec4 fragColor;
 
 void main() {
     float fov = 0.8;
-    Ray ray = Ray(playerPosition, normalize(vec3(uv.x * (screenResolution.x / screenResolution.y) * fov, uv.y * fov, 1.0)));
+    float aspect = screenResolution.x / screenResolution.y;
+
+    Ray ray = Ray(playerPosition, normalize(vec3(uv.x * aspect * fov, uv.y * fov, 1.0)));
     ray.direction.yz *= rotate(-playerRotation.x);
     ray.direction.xz *= rotate(-playerRotation.y);
     ray.direction.zy *= rotate(-playerRotation.z);
 
-    ivec2 pixelUv = ivec2(int(uv.x * 1920.0), int(uv.y * 1080.0));
-    int seed = pixelUv.y * 1920 + pixelUv.x;
+    ivec2 pixelUv = ivec2(int(uv.x * screenResolution.x * 8.0), int(uv.y * screenResolution.y * 8.0));
+    int seed = int(pixelUv.y * screenResolution.x * 8.0 + pixelUv.x * 8.0 + time * 3289493.0);
+
     fragColor = vec4(denoise(ray, seed), 1.0);
-    //fragColor = vec4(randomVector(seed), 1.0);
 }

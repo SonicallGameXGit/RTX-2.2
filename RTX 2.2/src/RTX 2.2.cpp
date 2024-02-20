@@ -85,12 +85,16 @@ int main() {
     int frame = 0;
     int mouseGrabFrame = 0;
 
+    float loopTime = 0.0f;
+
     RTX::Time time;
     while (RTX::Window::isRunning()) {
         RTX::Window::update();
         RTX::Mouse::update();
 
         frame++;
+        loopTime += time.getDelta();
+        if (loopTime >= 10.0f) loopTime = 0.0f;
 
         if (RTX::Keyboard::isPressed(GLFW_KEY_ESCAPE)) {
             if (!mouseGrabFrame) {
@@ -120,8 +124,8 @@ int main() {
         shaderProgram.setUniform("playerPosition", player.position);
         shaderProgram.setUniform("playerRotation", player.rotation);
         shaderProgram.setUniform("sunDirection", glm::vec3(sunDirection[0], sunDirection[1], sunDirection[2]));
-        shaderProgram.setUniform("aspect", RTX::Window::getSize().x / RTX::Window::getSize().y);
-        shaderProgram.setUniform("time", time.getTime());
+        shaderProgram.setUniform("screenResolution", RTX::Window::getSize());
+        shaderProgram.setUniform("time", loopTime);
 
         glBegin(GL_QUADS);
         glVertex2i(-1, -1);
