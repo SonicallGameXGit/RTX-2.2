@@ -1,8 +1,6 @@
 #include "engine/graphics.h"
 #include "engine/math.h"
 #include "engine/input.h"
-#include <sys/types.h>
-#include <sys/stat.h>
 
 namespace RTX {
     class Player {
@@ -63,10 +61,18 @@ int main() {
 
     RTX::Window::initializeImGui(RTX_IMGUI_THEME_CLASSIC);
 
-    RTX::ShaderProgram shaderProgram;
-    shaderProgram.addShader(RTX::Shader("res/shaders/raytrace.vert", GL_VERTEX_SHADER));
-    shaderProgram.addShader(RTX::Shader("res/shaders/raytrace.frag", GL_FRAGMENT_SHADER));
-    shaderProgram.compile();
+    RTX::ShaderProgram raytraceProgram;
+    raytraceProgram.addShader(RTX::Shader("res/shaders/raytrace.vert", GL_VERTEX_SHADER));
+    raytraceProgram.addShader(RTX::Shader("res/shaders/raytrace.frag", GL_FRAGMENT_SHADER));
+    raytraceProgram.compile();
+
+    RTX::ShaderProgram screenProgram;
+    screenProgram.addShader(RTX::Shader("res/shaders/screen.vert", GL_VERTEX_SHADER));
+    screenProgram.addShader(RTX::Shader("res/shaders/screen.frag", GL_FRAGMENT_SHADER));
+    screenProgram.compile();
+
+    RTX::FrameBuffer frameBuffer = RTX::FrameBuffer((int)RTX::Window::getSize().x, (int)RTX::Window::getSize().y);
+    RTX::FrameBuffer lastFrameBuffer = RTX::FrameBuffer((int)RTX::Window::getSize().x, (int)RTX::Window::getSize().y);
 
     RTX::Player player(glm::vec3(), glm::vec3(), glm::vec3(0.4f, 1.76f, 0.4f));
 
@@ -82,10 +88,13 @@ int main() {
     float sunDirection[3] = { 0.3f, 0.4f, 0.3f };
     float shaderUpdateTime = 0.0f;
 
+    int renderFrame = 0;
     int frame = 0;
     int mouseGrabFrame = 0;
 
     float loopTime = 0.0f;
+
+    glm::vec2 lastWindowSize = RTX::Window::getSize();
 
     RTX::Time time;
     while (RTX::Window::isRunning()) {
@@ -93,6 +102,7 @@ int main() {
         RTX::Mouse::update();
 
         frame++;
+
         loopTime += time.getDelta();
         if (loopTime >= 10.0f) loopTime = 0.0f;
 
@@ -105,6 +115,9 @@ int main() {
             mouseGrabFrame = 0;
         }
 
+        glm::vec3 lastPlayerPos = glm::vec3(player.position);
+        glm::vec3 lastPlayerAngle = glm::vec3(player.rotation);
+
         if(RTX::Mouse::isGrabbed()) player.update(time);
         time.update();
 
@@ -114,18 +127,42 @@ int main() {
         fps++;
         
         if (fpsUpdateTime >= 1.0f) {
-            std::cout << fps << '\n';
+            RTX::Window::setTitle(std::string("SUPER 3D YOPTA! Fps: " + std::to_string(fps)).c_str());
 
             fpsUpdateTime = 0.0f;
             fps = 0;
         }
 
-        shaderProgram.load();
-        shaderProgram.setUniform("playerPosition", player.position);
-        shaderProgram.setUniform("playerRotation", player.rotation);
-        shaderProgram.setUniform("sunDirection", glm::vec3(sunDirection[0], sunDirection[1], sunDirection[2]));
-        shaderProgram.setUniform("screenResolution", RTX::Window::getSize());
-        shaderProgram.setUniform("time", loopTime);
+        renderFrame++;
+        bool renderToLast = renderFrame % 2;
+
+        if (renderToLast) lastFrameBuffer.load();
+        else frameBuffer.load();
+
+        raytraceProgram.load();
+        raytraceProgram.setUniform("playerPosition", player.position);
+        raytraceProgram.setUniform("playerRotation", player.rotation);
+        raytraceProgram.setUniform("sunDirection", glm::vec3(sunDirection[0], sunDirection[1], sunDirection[2]));
+        raytraceProgram.setUniform("screenResolution", RTX::Window::getSize());
+        raytraceProgram.setUniform("time", loopTime);
+        raytraceProgram.setUniform("denoiseFactor", 1.0f / (float) renderFrame);
+
+        glBindTexture(GL_TEXTURE_2D, renderToLast ? frameBuffer.getTexture() : lastFrameBuffer.getTexture());
+        glActiveTexture(GL_TEXTURE0);
+
+        glBegin(GL_QUADS);
+        glVertex2i(-1, -1);
+        glVertex2i(1, -1);
+        glVertex2i(1, 1);
+        glVertex2i(-1, 1);
+        glEnd();
+
+        RTX::FrameBuffer::unload();
+
+        screenProgram.load();
+        screenProgram.setUniform("screenResolution", RTX::Window::getSize());
+
+        glBindTexture(GL_TEXTURE_2D, renderToLast ? lastFrameBuffer.getTexture() : frameBuffer.getTexture());
 
         glBegin(GL_QUADS);
         glVertex2i(-1, -1);
@@ -135,28 +172,56 @@ int main() {
         glEnd();
 
         RTX::ShaderProgram::unload();
+        glBindTexture(GL_TEXTURE_2D, 0);
 
         RTX::Window::beginImGui();
 
         ImGui::Begin("Shader Editor");
 
+        glm::vec3 lastSunDirection = glm::vec3(sunDirection[0], sunDirection[1], sunDirection[2]);
+
         ImGui::DragFloat3("Sun Diretion", sunDirection, 0.005f, -1.0f, 1.0f);
         if (shaderUpdateTime >= 5.0f) {
             shaderUpdateTime = 0.0f;
 
-            shaderProgram.clear();
-            shaderProgram = RTX::ShaderProgram();
-            shaderProgram.addShader(RTX::Shader("res/shaders/raytrace.vert", GL_VERTEX_SHADER));
-            shaderProgram.addShader(RTX::Shader("res/shaders/raytrace.frag", GL_FRAGMENT_SHADER));
-            shaderProgram.compile();
+            raytraceProgram.clear();
+            raytraceProgram = RTX::ShaderProgram();
+            raytraceProgram.addShader(RTX::Shader("res/shaders/raytrace.vert", GL_VERTEX_SHADER));
+            raytraceProgram.addShader(RTX::Shader("res/shaders/raytrace.frag", GL_FRAGMENT_SHADER));
+            raytraceProgram.compile();
+
+            screenProgram.clear();
+            screenProgram = RTX::ShaderProgram();
+            screenProgram.addShader(RTX::Shader("res/shaders/screen.vert", GL_VERTEX_SHADER));
+            screenProgram.addShader(RTX::Shader("res/shaders/screen.frag", GL_FRAGMENT_SHADER));
+            screenProgram.compile();
         }
 
         ImGui::End();
 
         RTX::Window::endImGui();
+
+        if (lastPlayerPos != player.position || lastPlayerAngle != player.rotation || lastSunDirection.x != sunDirection[0] || lastSunDirection.y != sunDirection[1] || lastSunDirection.z != sunDirection[2]) {
+            renderFrame = 0;
+        }
+
+        glm::vec2 windowSize = RTX::Window::getSize();
+        if (lastWindowSize != windowSize) {
+            lastWindowSize = glm::vec2(windowSize);
+
+            frameBuffer.clear();
+            lastFrameBuffer.clear();
+
+            frameBuffer = RTX::FrameBuffer((int)windowSize.x, (int)windowSize.y);
+            lastFrameBuffer = RTX::FrameBuffer((int)windowSize.x, (int)windowSize.y);
+        }
     }
 
-    shaderProgram.clear();
+    raytraceProgram.clear();
+    screenProgram.clear();
+
+    frameBuffer.clear();
+    lastFrameBuffer.clear();
 
     RTX::Window::clearImGui();
     RTX::Window::close();

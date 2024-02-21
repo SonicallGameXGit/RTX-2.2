@@ -48,6 +48,10 @@ void RTX::Window::close() {
 	glfwTerminate();
 }
 
+void RTX::Window::setTitle(const char* title) {
+	glfwSetWindowTitle(window, title);
+}
+
 void RTX::Window::initializeImGui(unsigned int theme) {
 	IMGUI_CHECKVERSION();
 
@@ -113,10 +117,10 @@ RTX::Shader::Shader(const char* location, GLenum type) {
 	}
 }
 
-void RTX::Shader::clear() {
+void RTX::Shader::clear() const {
 	glDeleteShader(id);
 }
-int RTX::Shader::getId() {
+int RTX::Shader::getId() const {
 	return id;
 }
 
@@ -128,7 +132,7 @@ void RTX::ShaderProgram::addShader(Shader shader) {
 	shaders.push_back(shader);
 	glAttachShader(id, shader.getId());
 }
-bool RTX::ShaderProgram::compile() {
+bool RTX::ShaderProgram::compile() const {
 	bool success = true;
 
 	glLinkProgram(id);
@@ -161,13 +165,13 @@ bool RTX::ShaderProgram::compile() {
 	return success;
 }
 
-void RTX::ShaderProgram::load() {
+void RTX::ShaderProgram::load() const {
 	glUseProgram(id);
 }
 void RTX::ShaderProgram::unload() {
 	glUseProgram(0);
 }
-void RTX::ShaderProgram::clear() {
+void RTX::ShaderProgram::clear() const {
 	for (auto& shader : shaders) {
 		glDetachShader(id, shader.getId());
 		shader.clear();
@@ -176,12 +180,59 @@ void RTX::ShaderProgram::clear() {
 	glDeleteProgram(id);
 }
 
-void RTX::ShaderProgram::setUniform(const char* id, float value) {
+void RTX::ShaderProgram::setUniform(const char* id, float value) const {
 	glUniform1f(glGetUniformLocation(this->id, id), value);
 }
-void RTX::ShaderProgram::setUniform(const char* id, glm::vec2 value) {
+void RTX::ShaderProgram::setUniform(const char* id, glm::vec2 value) const {
 	glUniform2f(glGetUniformLocation(this->id, id), value.x, value.y);
 }
-void RTX::ShaderProgram::setUniform(const char* id, glm::vec3 value) {
+void RTX::ShaderProgram::setUniform(const char* id, glm::vec3 value) const {
 	glUniform3f(glGetUniformLocation(this->id, id), value.x, value.y, value.z);
+}
+
+void RTX::FrameBuffer::unload() {
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glViewport(0, 0, (int)Window::getSize().x, (int)Window::getSize().y);
+}
+
+RTX::FrameBuffer::FrameBuffer(int width, int height) {
+	this->width = width;
+	this->height = height;
+
+	glGenFramebuffers(1, &fboId);
+	glBindFramebuffer(GL_FRAMEBUFFER, fboId);
+
+	glGenTextures(1, &textureId);
+	glBindTexture(GL_TEXTURE_2D, textureId);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_FLOAT, NULL);
+
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, textureId, 0);
+
+	unload();
+}
+
+void RTX::FrameBuffer::load() const {
+	glBindFramebuffer(GL_FRAMEBUFFER, fboId);
+	
+	glViewport(0, 0, width, height);
+	glClear(GL_COLOR_BUFFER_BIT);
+}
+void RTX::FrameBuffer::clear() const {
+	glDeleteFramebuffers(1, &fboId);
+	glDeleteTextures(1, &textureId);
+}
+
+int RTX::FrameBuffer::getTexture() const {
+	return textureId;
+}
+int RTX::FrameBuffer::getWidth() const {
+	return width;
+}
+int RTX::FrameBuffer::getHeight() const {
+	return height;
 }
