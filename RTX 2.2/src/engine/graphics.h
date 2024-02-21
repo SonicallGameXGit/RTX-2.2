@@ -12,6 +12,7 @@
 #include "../imgui/imgui.h"
 #include "../imgui/imgui_impl_glfw.h"
 #include "../imgui/imgui_impl_opengl3.h"
+#include "../stb/stb_image.h"
 
 #define RTX_IMGUI_THEME_DARK 0
 #define RTX_IMGUI_THEME_LIGHT 1
@@ -60,6 +61,7 @@ namespace RTX {
 
 		void clear() const;
 
+		void setUniform(const char* id, int value) const;
 		void setUniform(const char* id, float value) const;
 		void setUniform(const char* id, glm::vec2 value) const;
 		void setUniform(const char* id, glm::vec3 value) const;
@@ -82,5 +84,9 @@ namespace RTX {
 	private:
 		GLuint fboId, rboId, textureId;
 		int width, height;
+	};
+	class Texture {
+	public:
+		static int loadFromFile(const char* location, int filter);
 	};
 }

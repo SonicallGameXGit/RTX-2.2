@@ -74,6 +74,8 @@ int main() {
     RTX::FrameBuffer frameBuffer = RTX::FrameBuffer((int)RTX::Window::getSize().x, (int)RTX::Window::getSize().y);
     RTX::FrameBuffer lastFrameBuffer = RTX::FrameBuffer((int)RTX::Window::getSize().x, (int)RTX::Window::getSize().y);
 
+    int skyboxTexture = RTX::Texture::loadFromFile("res/textures/skybox.png", GL_LINEAR);
+
     RTX::Player player(glm::vec3(), glm::vec3(), glm::vec3(0.4f, 1.76f, 0.4f));
 
     float fpsUpdateTime = 0.0f;
@@ -146,9 +148,14 @@ int main() {
         raytraceProgram.setUniform("screenResolution", RTX::Window::getSize());
         raytraceProgram.setUniform("time", loopTime);
         raytraceProgram.setUniform("denoiseFactor", 1.0f / (float) renderFrame);
+        raytraceProgram.setUniform("lastFrameSampler", 0);
+        raytraceProgram.setUniform("skyboxSampler", 1);
 
-        glBindTexture(GL_TEXTURE_2D, renderToLast ? frameBuffer.getTexture() : lastFrameBuffer.getTexture());
         glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, renderToLast ? frameBuffer.getTexture() : lastFrameBuffer.getTexture());
+
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, skyboxTexture);
 
         glBegin(GL_QUADS);
         glVertex2i(-1, -1);
@@ -162,6 +169,7 @@ int main() {
         screenProgram.load();
         screenProgram.setUniform("screenResolution", RTX::Window::getSize());
 
+        glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, renderToLast ? lastFrameBuffer.getTexture() : frameBuffer.getTexture());
 
         glBegin(GL_QUADS);

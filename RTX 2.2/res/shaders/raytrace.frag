@@ -1,11 +1,11 @@
-#version 130
+#version 330
 #define PI 3.1415926536
 
 #define SUN_COLOR vec3(1.0, 0.8, 0.6) * 5.0
 #define SUN_RADIUS 0.0025
 #define SKY_BRIGHTNESS 0.8
 
-#define NULL_MATERIAL Material(vec3(0.0), 0.0, false)
+#define NULL_MATERIAL Material(vec3(0.0), 0.0, 0.0, 0.0, false)
 #define NULL_HIT_INFO HitInfo(false, 0.0, 0.0, vec3(0.0), NULL_MATERIAL)
 
 in vec2 uv;
@@ -15,7 +15,9 @@ uniform vec3 playerRotation;
 uniform vec3 sunDirection;
 
 uniform vec2 screenResolution;
+
 uniform sampler2D lastFrameSampler;
+uniform sampler2D skyboxSampler;
 
 uniform float randomOffset;
 uniform float denoiseFactor;
@@ -27,7 +29,10 @@ struct Ray {
 
 struct Material {
     vec3 color;
+
     float diffuse;
+    float glass;
+    float glassReflectivity;
 
     bool emissive;
 };
@@ -89,11 +94,14 @@ vec3 randomHemisphereDirection(const vec3 n, inout float seed) {
 
 
 vec3 sky(Ray ray) {
-    vec3 skyColor = mix(vec3(0.666), vec3(0.7, 0.8, 1.0), ray.direction.y / 2.0 + 0.5);
+    //vec3 skyColor = mix(vec3(0.666), vec3(0.7, 0.8, 1.0), ray.direction.y / 2.0 + 0.5);
+    vec2 skyUv = vec2(atan(ray.direction.z, ray.direction.x), asin(ray.direction.y) * 2.0);
+    skyUv = (skyUv / PI) / 2.0 + 0.5;
+
+    vec3 skyColor = texture2D(skyboxSampler, skyUv).rgb;
     vec3 sunColor = mix(vec3(0.0), SUN_COLOR, pow(clamp(dot(ray.direction, normalize(sunDirection)), 0.0, 1.0), 1.0 / SUN_RADIUS));
 
-    //return skyColor * SKY_BRIGHTNESS + sunColor;
-    return vec3(0.0);
+    return skyColor * SKY_BRIGHTNESS + sunColor;
 }
 
 HitInfo checkSphere(Ray ray, Sphere sphere) {
@@ -126,17 +134,20 @@ HitInfo checkBox(Ray ray, Box box) {
 HitInfo rayCast(Ray ray) {
     HitInfo hitInfo = HitInfo(false, 1000000.0, 0.0, vec3(0.0), NULL_MATERIAL);
     
-    HitInfo floorHitInfo = checkBox(ray, Box(vec3(-10.0, -1.0, -10.0), vec3(20.0, 1.0, 20.0), Material(vec3(2.0), 0.0, true)));
+    HitInfo floorHitInfo = checkBox(ray, Box(vec3(-10.0, -1.0, -10.0), vec3(20.0, 1.0, 20.0), Material(vec3(0.9), 0.9, 0.0, 0.0, false)));
     if(floorHitInfo.hit && floorHitInfo.distance < hitInfo.distance) hitInfo = floorHitInfo;
 
-    HitInfo wallHitInfo = checkBox(ray, Box(vec3(-10.0, 0.0, -10.0), vec3(20.0, 10.0, 1.0), Material(vec3(0.9, 0.2, 0.4), 0.4, false)));
+    HitInfo wallHitInfo = checkBox(ray, Box(vec3(-10.0, 0.0, -10.0), vec3(20.0, 10.0, 1.0), Material(vec3(0.9, 0.2, 0.4), 0.9, 0.0, 0.0, false)));
     if(wallHitInfo.hit && wallHitInfo.distance < hitInfo.distance) hitInfo = wallHitInfo;
 
-    HitInfo anotherWallHitInfo = checkBox(ray, Box(vec3(-10.0, 0.0, -10.0), vec3(1.0, 10.0, 20.0), Material(vec3(0.4, 0.9, 0.2), 0.4, false)));
+    HitInfo anotherWallHitInfo = checkBox(ray, Box(vec3(-10.0, 0.0, -10.0), vec3(1.0, 10.0, 20.0), Material(vec3(0.4, 0.9, 0.2), 0.9, 0.0, 0.0, false)));
     if(anotherWallHitInfo.hit && anotherWallHitInfo.distance < hitInfo.distance) hitInfo = anotherWallHitInfo;
 
-    HitInfo sphereHitInfo = checkSphere(ray, Sphere(vec3(4.0, 1.0, 4.0), 1.0, Material(vec3(0.4, 0.2, 0.9), 0.99, false)));
+    HitInfo sphereHitInfo = checkSphere(ray, Sphere(vec3(4.0, 1.0, 4.0), 1.0, Material(vec3(0.2, 0.5, 1.0), 0.04, 0.15, 0.4, false)));
     if(sphereHitInfo.hit && sphereHitInfo.distance < hitInfo.distance) hitInfo = sphereHitInfo;
+    
+    HitInfo texturedSphereHitInfo = checkSphere(ray, Sphere(vec3(2.0, 1.0, 1.0), 1.0, Material(vec3(1.0), 0.4, 0.0, 0.0, false)));
+    if(texturedSphereHitInfo.hit && texturedSphereHitInfo.distance < hitInfo.distance) hitInfo = texturedSphereHitInfo;
 
     return hitInfo;
 }
@@ -151,12 +162,24 @@ vec3 rayTrace(Ray ray, inout float seed) {
         color *= hitInfo.material.color;
         if(hitInfo.material.emissive) return color;
         
-        ray.position += ray.direction * hitInfo.distance;
+        float fresnel = pow(clamp(1.0 - dot(hitInfo.normal, -ray.direction), 0.0, 1.0), 1.0 + hitInfo.material.glass);
+        float reflectChance = hash(seed) * (fresnel + hitInfo.material.glassReflectivity);
+
+        if(hitInfo.material.glass > 0.0 && reflectChance < 0.5) {
+            ray.position += ray.direction * (hitInfo.farDistance - 0.001);
+
+            vec3 refracted = refract(ray.direction, hitInfo.normal, 1.0 - hitInfo.material.glass);
+            ray.direction = hash3(seed) * 2.0 - 1.0;
+            ray.direction *= sign(dot(ray.direction, -hitInfo.normal));
+            ray.direction = mix(refracted, ray.direction, hitInfo.material.diffuse);
+        } else {
+            ray.position += ray.direction * (hitInfo.distance - 0.001);
         
-        vec3 reflected = reflect(ray.direction, hitInfo.normal);
-        ray.direction = hash3(seed) * 2.0 - 1.0;
-        ray.direction *= sign(dot(ray.direction, hitInfo.normal));
-        ray.direction = mix(reflected, ray.direction, hitInfo.material.diffuse);
+            vec3 reflected = reflect(ray.direction, hitInfo.normal);
+            ray.direction = hash3(seed) * 2.0 - 1.0;
+            ray.direction *= sign(dot(ray.direction, hitInfo.normal));
+            ray.direction = mix(reflected, ray.direction, hitInfo.material.diffuse);
+        }
     }
 
     return vec3(0.0);
@@ -164,11 +187,11 @@ vec3 rayTrace(Ray ray, inout float seed) {
 
 vec3 denoise(Ray ray, inout float seed) {
     vec3 color;
-    for(int i = 0; i < 8; i++) {
+    for(int i = 0; i < 4; i++) {
         color += rayTrace(ray, seed);
     }
 
-    return clamp(color / 8.0, vec3(0.0), vec3(1.0));
+    return clamp(color / 4.0, vec3(0.0), vec3(1.0));
 }
 
 out vec4 fragColor;
