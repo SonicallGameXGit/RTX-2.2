@@ -2,8 +2,8 @@
 #define PI 3.1415926536
 
 #define SUN_COLOR vec3(1.0, 0.8, 0.6) * 5.0
-#define SUN_RADIUS 0.05
-#define SKY_BRIGHTNESS 0.0
+#define SUN_RADIUS 0.0025
+#define SKY_BRIGHTNESS 0.8
 
 #define NULL_MATERIAL Material(vec3(0.0), 0.0)
 #define NULL_HIT_INFO HitInfo(false, 0.0, 0.0, vec3(0.0), NULL_MATERIAL)
@@ -50,36 +50,6 @@ struct HitInfo {
     Material material;
 };
 
-float random(inout int seed) {
-    seed = seed * 747796405 + 2891336453;
-    
-    int result = ((seed >> ((seed >> 28) + 4)) ^ seed) * 277803737;
-    result = (result >> 22) ^ result;
-
-	return result / 4294967295.0;
-}
-float normalDistributedRandom(inout int seed) {
-    float value = random(seed);
-
-    float theta = 2.0 * 3.1415926536 * value;
-    return sqrt(-2.0 * log(value)) * cos(theta);
-}
-
-vec3 randomVector(inout int seed) {
-    //for(int i = 0; i < 1000; i++) {
-    //    vec3 vector = vec3(normalDistributedRandom(seed), normalDistributedRandom(seed), normalDistributedRandom(seed)) * 2.0 - 1.0;
-    //    float squareDistance = dot(vector, vector);
-    //    if(squareDistance <= 1.0) return vector / sqrt(squareDistance);
-    //}
-
-    //return vec3(0.0);
-    return normalize(vec3(normalDistributedRandom(seed), normalDistributedRandom(seed), normalDistributedRandom(seed)) * 2.0 - 1.0);
-}
-vec3 randomHemisphereVector(inout int seed, vec3 normal) {
-    vec3 vector = randomVector(seed);
-    return vector * sign(dot(vector, normal));
-}
-
 mat2 rotate(float angle) {
     float radAngle = radians(angle);
 
@@ -88,6 +58,30 @@ mat2 rotate(float angle) {
 
     return mat2(cos, -sin, sin, cos);
 }
+
+float hash(inout float seed) { 
+	return fract(sin(dot(vec2(seed += 0.8), vec2(12.9898, 4.1414))) * 43758.5453);
+}
+
+vec2 hash2(inout float seed) {
+    return vec2(hash(seed), hash(seed));
+}
+
+vec3 hash3(inout float seed) {
+    return vec3(hash(seed), hash(seed), hash(seed));
+}
+
+vec3 randomSphereDirection(inout float seed) {
+    vec2 h = hash2(seed) * vec2(2.0, 6.28318530718) - vec2(1,0);
+    float phi = h.y;
+	return vec3(sqrt(1.0 -h.x * h.x) * vec2(sin(phi), cos(phi)), h.x);
+}
+
+vec3 randomHemisphereDirection(const vec3 n, inout float seed) {
+	vec3 dr = randomSphereDirection(seed);
+	return dot(dr, n) * dr;
+}
+
 
 vec3 sky(Ray ray) {
     vec3 skyColor = mix(vec3(0.666), vec3(0.7, 0.8, 1.0), ray.direction.y / 2.0 + 0.5);
@@ -132,29 +126,36 @@ HitInfo rayCast(Ray ray) {
     HitInfo wallHitInfo = checkBox(ray, Box(vec3(-10.0, 0.0, -10.0), vec3(20.0, 10.0, 1.0), Material(vec3(0.9, 0.2, 0.4), 0.1)));
     if(wallHitInfo.hit && wallHitInfo.distance < hitInfo.distance) hitInfo = wallHitInfo;
 
+    HitInfo anotherWallHitInfo = checkBox(ray, Box(vec3(-10.0, 0.0, -10.0), vec3(1.0, 10.0, 20.0), Material(vec3(0.4, 0.9, 0.2), 0.1)));
+    if(anotherWallHitInfo.hit && anotherWallHitInfo.distance < hitInfo.distance) hitInfo = anotherWallHitInfo;
+
     HitInfo sphereHitInfo = checkSphere(ray, Sphere(vec3(4.0, 1.0, 4.0), 1.0, Material(vec3(0.4, 0.2, 0.9), 0.99)));
     if(sphereHitInfo.hit && sphereHitInfo.distance < hitInfo.distance) hitInfo = sphereHitInfo;
 
     return hitInfo;
 }
 
-vec3 rayTrace(Ray ray, inout int seed) {
+vec3 rayTrace(Ray ray, inout float seed) {
     vec3 color = vec3(1.0);
 
-    for(int i = 0; i < 32; i++) {
+    for(int i = 0; i < 8; i++) {
         HitInfo hitInfo = rayCast(ray);
         if(!hitInfo.hit) return color * sky(ray);
 
         color *= hitInfo.material.color;
         
         ray.position += ray.direction * hitInfo.distance;
-        ray.direction = mix(reflect(ray.direction, hitInfo.normal), randomHemisphereVector(seed, hitInfo.normal), 1.0);
+        
+        vec3 reflected = reflect(ray.direction, hitInfo.normal);
+        ray.direction = hash3(seed) * 2.0 - 1.0;
+        ray.direction *= sign(dot(ray.direction, hitInfo.normal));
+        ray.direction = mix(reflected, ray.direction, 1.0);
     }
 
     return vec3(0.0);
 }
 
-vec3 denoise(Ray ray, inout int seed) {
+vec3 denoise(Ray ray, inout float seed) {
     vec3 color;
     for(int i = 0; i < 32; i++) {
         color += rayTrace(ray, seed);
@@ -172,8 +173,6 @@ void main() {
     ray.direction.xz *= rotate(-playerRotation.y);
     ray.direction.zy *= rotate(-playerRotation.z);
 
-    ivec2 pixelUv = ivec2(int(uv.x * 1920.0), int(uv.y * 1080.0));
-    int seed = pixelUv.y * 1920 + pixelUv.x;
+    float seed = uv.x / (screenResolution.x / screenResolution.y) + uv.y + 3.43121412313;
     fragColor = vec4(denoise(ray, seed), 1.0);
-    //fragColor = vec4(randomVector(seed), 1.0);
 }
