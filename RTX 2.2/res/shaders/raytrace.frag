@@ -1,15 +1,15 @@
 #version 330
 #define PI 3.1415926536
 
-#define SUN_COLOR vec3(1.0, 0.8, 0.6) * 5.0 * 0.0
+#define SUN_COLOR vec3(1.0, 0.8, 0.6) * 5.0
 #define SUN_RADIUS 0.0025
 #define SKY_BRIGHTNESS 0.8
 
 #define NULL_MATERIAL Material(vec3(0.0), 0.0, 0.0, 0.0, false)
 #define NULL_HIT_INFO HitInfo(false, 0.0, 0.0, vec3(0.0), NULL_MATERIAL)
 
-#define BOXES 3
-#define SPHERES 2
+#define BOXES 13
+#define SPHERES 4
 
 in vec2 uv;
 

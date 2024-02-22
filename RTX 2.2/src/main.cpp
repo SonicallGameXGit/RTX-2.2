@@ -21,30 +21,24 @@ namespace RTX {
         glm::vec3 position;
         glm::vec3 scale;
 
-        Material* material;
+        int materialId;
 
-        Box(glm::vec3 position, glm::vec3 scale, Material* material) {
-            this->position = glm::vec3(position);
-            this->scale = glm::vec3(scale);
-            this->material = material;
-        }
+        const char* tag;
+
+        Box(glm::vec3 position, glm::vec3 scale, int materialId) : position(position), scale(scale), materialId(materialId) {}
     };
     struct Sphere {
         glm::vec3 position;
         float scale;
 
-        Material* material;
+        int materialId;
 
-        Sphere(glm::vec3 position, float scale, Material* material) {
-            this->position = glm::vec3(position);
-            this->scale = scale;
-            this->material = material;
-        }
+        Sphere(glm::vec3 position, float scale, int materialId) : position(position), scale(scale), materialId(materialId) {}
     };
 
     class Player {
     public:
-        float walkSpeed = 7.0f, rotateSpeed = 0.09f, jumpHeight = 2.5f, eyeHeight = 0.2f;
+        float walkSpeed = 6.0f, rotateSpeed = 0.09f, jumpHeight = 1.5f, eyeHeight = 0.2f;
         glm::vec3 position, rotation, scale, velocity;
 
         bool flyMode = false;
@@ -149,38 +143,178 @@ namespace RTX {
         }
     };
 
-    class MapParser {
-    public:
-        std::unordered_map<const char*, std::unique_ptr<Material>> materials;
+    struct Map {
+        std::vector<Material> materials;
         std::vector<Box> boxes;
         std::vector<Sphere> spheres;
 
-        /*MapParser(std::unordered_map<const char*, std::unique_ptr<Material>> materials, std::vector<Box> boxes, std::vector<Sphere> spheres) {
-            this->materials = materials;
-            this->boxes = boxes;
-            this->spheres = spheres;
-        }*/
-
-        static void parseMap(const char* location) {
+        Map(std::vector<Material> materials, std::vector<Box> boxes, std::vector<Sphere> spheres) : materials(materials), boxes(boxes), spheres(spheres) {}
+    };
+    class MapParser {
+    public:
+        static Map parse(const char* location) {
             std::ifstream file(location);
             
-            std::unordered_map<const char*, std::unique_ptr<Material>> materials;
+            std::vector<Material> materials;
             std::vector<Box> boxes;
             std::vector<Sphere> spheres;
 
             if (!file.is_open()) {
                 throw std::runtime_error(std::string("Could not parse map: \"" + std::string(location) + "\""));
-                //return MapParser(materials, boxes, spheres);
+                return Map(materials, boxes, spheres);
             }
+
+            ReadMode readMode = MATERIAL;
 
             while (file) {
                 std::string line;
                 getline(file, line);
 
-                std::cout << line << '\n';
+                if (line.starts_with("Materials")) readMode = MATERIAL;
+                else if (line.starts_with("Boxes")) readMode = BOX;
+                else if (line.starts_with("Spheres")) readMode = SPHERE;
+                else {
+                    std::stringstream lineStream(line);
+                    if(readMode == MATERIAL) {
+                        // Split line to color, diffuse, glass, glassReflectivity and emissive by '/'                        
+                        std::string color;
+                        std::string diffuse;
+                        std::string glass;
+                        std::string glassReflectivity;
+                        std::string emissive;
+
+                        std::getline(lineStream, color, '/');
+                        std::getline(lineStream, diffuse, '/');
+                        std::getline(lineStream, glass, '/');
+                        std::getline(lineStream, glassReflectivity, '/');
+                        std::getline(lineStream, emissive, '/');
+
+                        // Get red, green and blue channels from color param by ','
+                        std::stringstream colorStream(color);
+                        std::string colorParam;
+                        std::stringstream colorParamStream;
+
+                        float red, green, blue;
+
+                        std::getline(colorStream, colorParam, ',');
+                        colorParamStream = std::stringstream(colorParam);
+                        colorParamStream >> red;
+
+                        std::getline(colorStream, colorParam, ',');
+                        colorParamStream = std::stringstream(colorParam);
+                        colorParamStream >> green;
+
+                        std::getline(colorStream, colorParam, ',');
+                        colorParamStream = std::stringstream(colorParam);
+                        colorParamStream >> blue;
+
+                        // Get diffuse from diffuse param
+                        float diffuseFloat;
+                        std::stringstream(diffuse) >> diffuseFloat;
+
+                        // Get diffuse from glass param
+                        float glassFloat;
+                        std::stringstream(glass) >> glassFloat;
+
+                        // Get diffuse from glassReflectivity param
+                        float glassReflectivityFloat;
+                        std::stringstream(glassReflectivity) >> glassReflectivityFloat;
+
+                        // Get diffuse from emissive param
+                        bool emissiveBoolean = emissive == "true";
+
+                        materials.push_back(Material(glm::vec3(red, green, blue), diffuseFloat, glassFloat, glassReflectivityFloat, emissiveBoolean));
+                    }
+                    else if (readMode == BOX) {
+                        // Split line to position, scale, materialId by '/'                        
+                        std::string position;
+                        std::string scale;
+                        std::string materialId;
+
+                        std::getline(lineStream, position, '/');
+                        std::getline(lineStream, scale, '/');
+                        std::getline(lineStream, materialId, '/');
+
+                        // Get x, y and z coords from position param by ','
+                        std::stringstream vectorStream(position);
+                        std::string vectorParam;
+                        std::stringstream vectorParamStream;
+
+                        float x, y, z;
+
+                        std::getline(vectorStream, vectorParam, ',');
+                        vectorParamStream = std::stringstream(vectorParam);
+                        vectorParamStream >> x;
+
+                        std::getline(vectorStream, vectorParam, ',');
+                        vectorParamStream = std::stringstream(vectorParam);
+                        vectorParamStream >> y;
+
+                        std::getline(vectorStream, vectorParam, ',');
+                        vectorParamStream = std::stringstream(vectorParam);
+                        vectorParamStream >> z;
+
+                        vectorStream = std::stringstream(scale);
+                        float width, height, length;
+
+                        std::getline(vectorStream, vectorParam, ',');
+                        vectorParamStream = std::stringstream(vectorParam);
+                        vectorParamStream >> width;
+
+                        std::getline(vectorStream, vectorParam, ',');
+                        vectorParamStream = std::stringstream(vectorParam);
+                        vectorParamStream >> height;
+
+                        std::getline(vectorStream, vectorParam, ',');
+                        vectorParamStream = std::stringstream(vectorParam);
+                        vectorParamStream >> length;
+
+                        int materialIdInt;
+                        std::stringstream(materialId) >> materialIdInt;
+
+                        boxes.push_back(Box(glm::vec3(x, y, z), glm::vec3(width, height, length), materialIdInt));
+                    }
+                    else {
+                        // Split line to position, scale, materialId by '/'                        
+                        std::string position;
+                        std::string scale;
+                        std::string materialId;
+
+                        std::getline(lineStream, position, '/');
+                        std::getline(lineStream, scale, '/');
+                        std::getline(lineStream, materialId, '/');
+
+                        // Get x, y and z coords from position param by ','
+                        std::stringstream vectorStream(position);
+                        std::string vectorParam;
+                        std::stringstream vectorParamStream;
+
+                        float x, y, z;
+
+                        std::getline(vectorStream, vectorParam, ',');
+                        vectorParamStream = std::stringstream(vectorParam);
+                        vectorParamStream >> x;
+
+                        std::getline(vectorStream, vectorParam, ',');
+                        vectorParamStream = std::stringstream(vectorParam);
+                        vectorParamStream >> y;
+
+                        std::getline(vectorStream, vectorParam, ',');
+                        vectorParamStream = std::stringstream(vectorParam);
+                        vectorParamStream >> z;
+
+                        float scaleFloat;
+                        std::stringstream(scale) >> scaleFloat;
+
+                        int materialIdInt;
+                        std::stringstream(materialId) >> materialIdInt;
+
+                        spheres.push_back(Sphere(glm::vec3(x, y, z), scaleFloat, materialIdInt));
+                    }
+                }
             }
 
-            //return MapParser(materials, boxes, spheres);
+            return Map(materials, boxes, spheres);
         }
 
         enum ReadMode {
@@ -208,27 +342,27 @@ int main() {
     RTX::FrameBuffer frameBuffer = RTX::FrameBuffer((int)RTX::Window::getSize().x, (int)RTX::Window::getSize().y);
     RTX::FrameBuffer lastFrameBuffer = RTX::FrameBuffer((int)RTX::Window::getSize().x, (int)RTX::Window::getSize().y);
 
-    int skyboxTexture = RTX::Texture::loadFromFile("res/textures/night_skybox.jpg", GL_LINEAR);
+    int skyboxTexture = RTX::Texture::loadFromFile("res/textures/skybox.png", GL_LINEAR);
 
-    //RTX::MapParser mapParser = RTX::MapParser::parseMap("res/maps/obby.rtmap");
+    RTX::Map mapa = RTX::MapParser::parse("res/maps/obby.rtmap");
 
-    std::unordered_map<const char*, std::unique_ptr<RTX::Material>> materials;
-    materials["floor"] = std::make_unique<RTX::Material>(glm::vec3(0.9f), 0.9f, 0.0f, 0.0f, false);
-    materials["redWall"] = std::make_unique<RTX::Material>(glm::vec3(0.9f, 0.1f, 0.2f), 0.9f, 0.0f, 0.0f, false);
-    materials["greenWall"] = std::make_unique<RTX::Material>(glm::vec3(0.2f, 0.9f, 0.2f), 0.9f, 0.0f, 0.0f, false);
-    materials["blueGlass"] = std::make_unique<RTX::Material>(glm::vec3(0.2f, 0.5f, 1.0f), 0.01f, 0.15f, 0.4f, false);
-    materials["redGlass"] = std::make_unique<RTX::Material>(glm::vec3(1.0f, 0.2f, 0.4f), 0.0f, 0.01f, 0.2f, false);
+    /*std::vector<RTX::Material> materials;
+    materials.push_back(RTX::Material(glm::vec3(0.9f), 0.9f, 0.0f, 0.0f, false));
+    materials.push_back(RTX::Material(glm::vec3(0.9f, 0.1f, 0.2f), 0.9f, 0.0f, 0.0f, false));
+    materials.push_back(RTX::Material(glm::vec3(0.2f, 0.9f, 0.2f), 0.9f, 0.0f, 0.0f, false));
+    materials.push_back(RTX::Material(glm::vec3(0.2f, 0.5f, 1.0f), 0.01f, 0.15f, 0.4f, false));
+    materials.push_back(RTX::Material(glm::vec3(1.0f, 0.2f, 0.4f), 0.0f, 0.01f, 0.2f, false));
 
     std::vector<RTX::Box> boxes;
-    boxes.push_back(RTX::Box(glm::vec3(-10.0f, -1.0f, -10.0f), glm::vec3(20.0f, 1.0f, 20.0f), materials["floor"].get()));
-    boxes.push_back(RTX::Box(glm::vec3(-10.0f, 0.0f, -10.0f), glm::vec3(20.0f, 10.0f, 1.0f), materials["redWall"].get()));
-    boxes.push_back(RTX::Box(glm::vec3(-10.0f, 0.0f, -10.0f), glm::vec3(1.0f, 10.0f, 20.0f), materials["greenWall"].get()));
+    boxes.push_back(RTX::Box(glm::vec3(-10.0f, -1.0f, -10.0f), glm::vec3(20.0f, 1.0f, 20.0f), 0));
+    boxes.push_back(RTX::Box(glm::vec3(-10.0f, 0.0f, -10.0f), glm::vec3(20.0f, 10.0f, 1.0f), 1));
+    boxes.push_back(RTX::Box(glm::vec3(-10.0f, 0.0f, -10.0f), glm::vec3(1.0f, 10.0f, 20.0f), 2));
 
     std::vector<RTX::Sphere> spheres;
-    spheres.push_back(RTX::Sphere(glm::vec3(4.0f, 1.0f, 4.0f), 1.0f, materials["blueGlass"].get()));
-    spheres.push_back(RTX::Sphere(glm::vec3(2.0f, 1.0f, 1.0f), 0.5f, materials["redGlass"].get()));
+    spheres.push_back(RTX::Sphere(glm::vec3(4.0f, 1.0f, 4.0f), 1.0f, 3));
+    spheres.push_back(RTX::Sphere(glm::vec3(2.0f, 1.0f, 1.0f), 0.5f, 4));*/
 
-    RTX::Player player(glm::vec3(0.0f, 5.0f, 0.0f), glm::vec3(), glm::vec3(0.4f, 1.76f, 0.4f));
+    RTX::Player player(glm::vec3(-1.5f, 5.0f, -1.5f), glm::vec3(), glm::vec3(0.4f, 1.76f, 0.4f));
 
     float fpsUpdateTime = 0.0f;
     int fps = 0;
@@ -282,7 +416,7 @@ int main() {
         glm::vec3 lastPlayerPos = glm::vec3(player.position);
         glm::vec3 lastPlayerAngle = glm::vec3(player.rotation);
 
-        if(RTX::Mouse::isGrabbed()) player.update(time, gravity, boxes, spheres);
+        if(RTX::Mouse::isGrabbed()) player.update(time, gravity, mapa.boxes, mapa.spheres);
 
         //world.update(lastPlayerPos, lastPlayerAngle, player);
 
@@ -319,30 +453,33 @@ int main() {
         raytraceProgram.setUniform("dofBlurSize", dofBlurSize);
         raytraceProgram.setUniform("fov", fov);
 
-        for (int i = 0; i < boxes.size(); i++) {
-            RTX::Box box = boxes[i];
+        for (int i = 0; i < mapa.boxes.size(); i++) {
+            RTX::Box box = mapa.boxes[i];
+            RTX::Material material = mapa.materials[box.materialId];
+
             std::string uniformId = "boxes[" + std::to_string(i) + ']';
 
             raytraceProgram.setUniform((uniformId + ".position").c_str(), box.position);
             raytraceProgram.setUniform((uniformId + ".size").c_str(), box.scale);
-            raytraceProgram.setUniform((uniformId + ".material.color").c_str(), box.material->color);
-            raytraceProgram.setUniform((uniformId + ".material.diffuse").c_str(), box.material->diffuse);
-            raytraceProgram.setUniform((uniformId + ".material.glass").c_str(), box.material->glass);
-            raytraceProgram.setUniform((uniformId + ".material.glassReflectivity").c_str(), box.material->glassReflectivity);
-            raytraceProgram.setUniform((uniformId + ".material.emissive").c_str(), box.material->emissive ? 1 : 0);
+            raytraceProgram.setUniform((uniformId + ".material.color").c_str(), material.color);
+            raytraceProgram.setUniform((uniformId + ".material.diffuse").c_str(), material.diffuse);
+            raytraceProgram.setUniform((uniformId + ".material.glass").c_str(), material.glass);
+            raytraceProgram.setUniform((uniformId + ".material.glassReflectivity").c_str(), material.glassReflectivity);
+            raytraceProgram.setUniform((uniformId + ".material.emissive").c_str(), material.emissive ? 1 : 0);
         }
+        for (int i = 0; i < mapa.spheres.size(); i++) {
+            RTX::Sphere sphere = mapa.spheres[i];
+            RTX::Material material = mapa.materials[sphere.materialId];
 
-        for (int i = 0; i < spheres.size(); i++) {
-            RTX::Sphere sphere = spheres[i];
             std::string uniformId = "spheres[" + std::to_string(i) + ']';
 
             raytraceProgram.setUniform((uniformId + ".position").c_str(), sphere.position);
             raytraceProgram.setUniform((uniformId + ".radius").c_str(), sphere.scale);
-            raytraceProgram.setUniform((uniformId + ".material.color").c_str(), sphere.material->color);
-            raytraceProgram.setUniform((uniformId + ".material.diffuse").c_str(), sphere.material->diffuse);
-            raytraceProgram.setUniform((uniformId + ".material.glass").c_str(), sphere.material->glass);
-            raytraceProgram.setUniform((uniformId + ".material.glassReflectivity").c_str(), sphere.material->glassReflectivity);
-            raytraceProgram.setUniform((uniformId + ".material.emissive").c_str(), sphere.material->emissive ? 1 : 0);
+            raytraceProgram.setUniform((uniformId + ".material.color").c_str(), material.color);
+            raytraceProgram.setUniform((uniformId + ".material.diffuse").c_str(), material.diffuse);
+            raytraceProgram.setUniform((uniformId + ".material.glass").c_str(), material.glass);
+            raytraceProgram.setUniform((uniformId + ".material.glassReflectivity").c_str(), material.glassReflectivity);
+            raytraceProgram.setUniform((uniformId + ".material.emissive").c_str(), material.emissive ? 1 : 0);
         }
 
         glActiveTexture(GL_TEXTURE0);

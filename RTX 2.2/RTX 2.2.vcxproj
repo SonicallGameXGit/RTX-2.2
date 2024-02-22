@@ -144,7 +144,7 @@
     <ClCompile Include="src\imgui\imgui_impl_opengl3.cpp" />
     <ClCompile Include="src\imgui\imgui_tables.cpp" />
     <ClCompile Include="src\imgui\imgui_widgets.cpp" />
-    <ClCompile Include="src\RTX 2.2.cpp" />
+    <ClCompile Include="src\main.cpp" />
     <ClCompile Include="src\stb\stb_image.cpp" />
   </ItemGroup>
   <ItemGroup>
