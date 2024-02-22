@@ -1,12 +1,15 @@
 #version 330
 #define PI 3.1415926536
 
-#define SUN_COLOR vec3(1.0, 0.8, 0.6) * 5.0
+#define SUN_COLOR vec3(1.0, 0.8, 0.6) * 5.0 * 0.0
 #define SUN_RADIUS 0.0025
 #define SKY_BRIGHTNESS 0.8
 
 #define NULL_MATERIAL Material(vec3(0.0), 0.0, 0.0, 0.0, false)
 #define NULL_HIT_INFO HitInfo(false, 0.0, 0.0, vec3(0.0), NULL_MATERIAL)
+
+#define BOXES 3
+#define SPHERES 2
 
 in vec2 uv;
 
@@ -21,6 +24,10 @@ uniform sampler2D skyboxSampler;
 
 uniform float randomOffset;
 uniform float denoiseFactor;
+
+uniform float dofFocusDistance;
+uniform float dofBlurSize;
+uniform float fov;
 
 struct Ray {
     vec3 position;
@@ -60,6 +67,9 @@ struct HitInfo {
     Material material;
 };
 
+uniform Box boxes[BOXES];
+uniform Sphere spheres[SPHERES];
+
 mat2 rotate(float angle) {
     float radAngle = radians(angle);
 
@@ -67,6 +77,20 @@ mat2 rotate(float angle) {
     float cos = cos(radAngle);
 
     return mat2(cos, -sin, sin, cos);
+}
+
+mat4 lookAt(vec3 position, vec3 target, vec3 up) {
+    vec3 front = normalize(target - position);
+    vec3 right = normalize(cross(up, front));
+
+    up = cross(front, right);
+
+    return mat4(
+        right.x, up.x, front.x, position.x,
+        right.y, up.y, front.y, position.y,
+        right.z, up.z, front.z, position.z,
+        0.0, 0.0, 0.0, 1.0
+    );
 }
 
 float hash(inout float seed) { 
@@ -134,20 +158,16 @@ HitInfo checkBox(Ray ray, Box box) {
 HitInfo rayCast(Ray ray) {
     HitInfo hitInfo = HitInfo(false, 1000000.0, 0.0, vec3(0.0), NULL_MATERIAL);
     
-    HitInfo floorHitInfo = checkBox(ray, Box(vec3(-10.0, -1.0, -10.0), vec3(20.0, 1.0, 20.0), Material(vec3(0.9), 0.9, 0.0, 0.0, false)));
-    if(floorHitInfo.hit && floorHitInfo.distance < hitInfo.distance) hitInfo = floorHitInfo;
-
-    HitInfo wallHitInfo = checkBox(ray, Box(vec3(-10.0, 0.0, -10.0), vec3(20.0, 10.0, 1.0), Material(vec3(0.9, 0.2, 0.4), 0.9, 0.0, 0.0, false)));
-    if(wallHitInfo.hit && wallHitInfo.distance < hitInfo.distance) hitInfo = wallHitInfo;
-
-    HitInfo anotherWallHitInfo = checkBox(ray, Box(vec3(-10.0, 0.0, -10.0), vec3(1.0, 10.0, 20.0), Material(vec3(0.4, 0.9, 0.2), 0.9, 0.0, 0.0, false)));
-    if(anotherWallHitInfo.hit && anotherWallHitInfo.distance < hitInfo.distance) hitInfo = anotherWallHitInfo;
-
-    HitInfo sphereHitInfo = checkSphere(ray, Sphere(vec3(4.0, 1.0, 4.0), 1.0, Material(vec3(0.2, 0.5, 1.0), 0.04, 0.15, 0.4, false)));
-    if(sphereHitInfo.hit && sphereHitInfo.distance < hitInfo.distance) hitInfo = sphereHitInfo;
-    
-    HitInfo texturedSphereHitInfo = checkSphere(ray, Sphere(vec3(2.0, 1.0, 1.0), 1.0, Material(vec3(1.0), 0.4, 0.0, 0.0, false)));
-    if(texturedSphereHitInfo.hit && texturedSphereHitInfo.distance < hitInfo.distance) hitInfo = texturedSphereHitInfo;
+    for(int i = 0; i < BOXES; i++) {
+        HitInfo boxHitInfo = checkBox(ray, boxes[i]);
+        if(boxHitInfo.hit && boxHitInfo.distance < hitInfo.distance)
+            hitInfo = boxHitInfo;
+    }
+    for(int i = 0; i < SPHERES; i++) {
+        HitInfo sphereHitInfo = checkSphere(ray, spheres[i]);
+        if(sphereHitInfo.hit && sphereHitInfo.distance < hitInfo.distance)
+            hitInfo = sphereHitInfo;
+    }
 
     return hitInfo;
 }
@@ -158,16 +178,26 @@ vec3 rayTrace(Ray ray, inout float seed) {
     for(int i = 0; i < 32; i++) {
         HitInfo hitInfo = rayCast(ray);
         if(!hitInfo.hit) return color * sky(ray);
+        //
+        //color *= hitInfo.material.color;
+        //
+        // Kakaya-to dich, neponyatnaya dlya moego mosga
+        //ray.position += ray.direction * (hitInfo.distance - 0.001);
+        //ray.direction = normalize(mix(sunDirection * 10.0, hash3(seed) * 2.0 - 1.0, 0.9));
+        //
+        //hitInfo = rayCast(ray);
+        //if(hitInfo.hit) color *= dot(hitInfo.normal, ray.direction);
+        //return color;
 
         color *= hitInfo.material.color;
         if(hitInfo.material.emissive) return color;
         
         float fresnel = pow(clamp(1.0 - dot(hitInfo.normal, -ray.direction), 0.0, 1.0), 1.0 + hitInfo.material.glass);
         float reflectChance = hash(seed) * (fresnel + hitInfo.material.glassReflectivity);
-
+        
         if(hitInfo.material.glass > 0.0 && reflectChance < 0.5) {
             ray.position += ray.direction * (hitInfo.farDistance - 0.001);
-
+        
             vec3 refracted = refract(ray.direction, hitInfo.normal, 1.0 - hitInfo.material.glass);
             ray.direction = hash3(seed) * 2.0 - 1.0;
             ray.direction *= sign(dot(ray.direction, -hitInfo.normal));
@@ -187,23 +217,37 @@ vec3 rayTrace(Ray ray, inout float seed) {
 
 vec3 denoise(Ray ray, inout float seed) {
     vec3 color;
-    for(int i = 0; i < 4; i++) {
+    for(int i = 0; i < 3; i++)
         color += rayTrace(ray, seed);
-    }
 
-    return clamp(color / 4.0, vec3(0.0), vec3(1.0));
+    return clamp(color / 3.0, vec3(0.0), vec3(1.0));
 }
 
 out vec4 fragColor;
 
 void main() {
-    float fov = 0.8;
-    Ray ray = Ray(playerPosition, normalize(vec3(uv.x * (screenResolution.x / screenResolution.y) * fov, uv.y * fov, 1.0)));
+    float seed = (uv.x / (screenResolution.x / screenResolution.y) + uv.y) * 392.38 + 3.43121412313 + denoiseFactor;
+
+    Ray ray = Ray(vec3(0.0), normalize(vec3(vec2(uv.x * (screenResolution.x / screenResolution.y), uv.y) * tan(radians(fov) / 2.0), 1.0)));
+
+    vec2 randomPoint = randomSphereDirection(seed).xy * dofBlurSize;
+
+    vec3 focalPoint = ray.direction * dofFocusDistance;
+    vec3 finalDirection = normalize(focalPoint - vec3(randomPoint, 0.0));
+
+    ray.position = vec3(randomPoint, 0.0);
+    ray.direction = finalDirection;
+
+    ray.position.yz *= rotate(-playerRotation.x);
+    ray.position.xz *= rotate(-playerRotation.y);
+    ray.position.zy *= rotate(-playerRotation.z);
+
     ray.direction.yz *= rotate(-playerRotation.x);
     ray.direction.xz *= rotate(-playerRotation.y);
     ray.direction.zy *= rotate(-playerRotation.z);
 
-    float seed = (uv.x / (screenResolution.x / screenResolution.y) + uv.y) * 392.38 + 3.43121412313 + denoiseFactor;
+    ray.position += playerPosition;
+
     fragColor = vec4(denoise(ray, seed), 1.0);
 
     vec4 lastFrameColor = texture2D(lastFrameSampler, uv / 2.0 + 0.5);

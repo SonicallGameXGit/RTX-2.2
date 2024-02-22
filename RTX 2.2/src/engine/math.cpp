@@ -1,7 +1,7 @@
 #include "math.h"
 
 RTX::Time::Time() {
-	lastTime = 0;
+	lastTime = (float) glfwGetTime();
 	delta = 0.0f;
 	time = 0.0f;
 }
