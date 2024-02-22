@@ -1,7 +1,7 @@
 #version 330
 #define PI 3.1415926536
 
-#define SUN_COLOR vec3(1.0, 0.8, 0.6) * 5.0
+#define SUN_COLOR vec3(1.0, 0.8, 0.6) * 5.0 * 0.0
 #define SUN_RADIUS 0.0025
 #define SKY_BRIGHTNESS 0.8
 

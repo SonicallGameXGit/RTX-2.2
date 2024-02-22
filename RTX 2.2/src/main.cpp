@@ -23,9 +23,9 @@ namespace RTX {
 
         int materialId;
 
-        const char* tag;
+        std::string tag;
 
-        Box(glm::vec3 position, glm::vec3 scale, int materialId) : position(position), scale(scale), materialId(materialId) {}
+        Box(glm::vec3 position, glm::vec3 scale, int materialId, std::string tag) : position(position), scale(scale), materialId(materialId), tag(tag) {}
     };
     struct Sphere {
         glm::vec3 position;
@@ -33,7 +33,9 @@ namespace RTX {
 
         int materialId;
 
-        Sphere(glm::vec3 position, float scale, int materialId) : position(position), scale(scale), materialId(materialId) {}
+        std::string tag;
+
+        Sphere(glm::vec3 position, float scale, int materialId, std::string tag) : position(position), scale(scale), materialId(materialId), tag(tag) {}
     };
 
     class Player {
@@ -49,8 +51,13 @@ namespace RTX {
             this->scale = glm::vec3(scale);
 
             velocity = glm::vec3();
+            startPosition = glm::vec3(position);
         }
 
+        void respawn() {
+            velocity = glm::vec3();
+            position = glm::vec3(startPosition);
+        }
         void update(Time time, float gravity, std::vector<Box> boxes, std::vector<Sphere> spheres) {
             velocity.x = 0.0f;
             velocity.z = 0.0f;
@@ -93,25 +100,36 @@ namespace RTX {
                 velocity.z /= horizontalLength;
             }
 
+            std::vector<std::string> collidedTags;
+
             position.x += velocity.x * walkSpeed * time.getDelta();
-            if (checkCollision(boxes, spheres)) {
+            collidedTags.push_back(checkCollision(boxes, spheres));
+            
+            if (collidedTags[collidedTags.size() - 1] != "") {
                 position.x -= velocity.x * walkSpeed * time.getDelta();
                 velocity.x = 0.0f;
             }
 
             position.y += velocity.y * walkSpeed * time.getDelta();
-            if (checkCollision(boxes, spheres)) {
+            collidedTags.push_back(checkCollision(boxes, spheres));
+
+            if (collidedTags[collidedTags.size() - 1] != "") {
                 position.y -= velocity.y * walkSpeed * time.getDelta();
 
                 if (velocity.y <= 0.0f) onGround = true;
-                velocity.y = 0.0f;
+                velocity.y = std::find(collidedTags.begin(), collidedTags.end(), "jump_pad") != collidedTags.end() ? 7.0f : 0.0f;
             }
 
             position.z += velocity.z * walkSpeed * time.getDelta();
-            if (checkCollision(boxes, spheres)) {
+            collidedTags.push_back(checkCollision(boxes, spheres));
+            
+            if (collidedTags[collidedTags.size() - 1] != "") {
                 position.z -= velocity.z * walkSpeed * time.getDelta();
                 velocity.z = 0.0f;
             }
+
+            if (std::find(collidedTags.begin(), collidedTags.end(), "laser") != collidedTags.end())
+                respawn();
 
             rotation.x -= RTX::Mouse::getVelocity().y * rotateSpeed;
             rotation.x = fmax(fmin(rotation.x, 90.0f), -90.0f);
@@ -125,21 +143,23 @@ namespace RTX {
         }
     private:
         bool onGround = false;
-        bool checkCollision(std::vector<Box> boxes, std::vector<Sphere> spheres) const {
+        glm::vec3 startPosition;
+
+        std::string checkCollision(std::vector<Box> boxes, std::vector<Sphere> spheres) const {
             for (Box& box : boxes)
                 if (position.x + scale.x >= box.position.x && position.x <= box.position.x + box.scale.x)
                     if (position.y + scale.y >= box.position.y && position.y <= box.position.y + box.scale.y)
                         if (position.z + scale.z >= box.position.z && position.z <= box.position.z + box.scale.z)
-                            return true;
+                            return box.tag;
             for (Sphere& sphere : spheres) {
                 glm::vec3 nearest(glm::max(glm::min(sphere.position.x, position.x + scale.x), position.x), glm::max(glm::min(sphere.position.y, position.y + scale.y), position.y), glm::max(glm::min(sphere.position.z, position.z + scale.z), position.z));
                 float length = glm::length(glm::vec3(sphere.position.x - nearest.x, sphere.position.y - nearest.y, sphere.position.z - nearest.z));
 
                 if (length * length < sphere.scale * sphere.scale)
-                    return true;
+                    return sphere.tag;
             }
 
-            return false;
+            return "";
         }
     };
 
@@ -230,10 +250,12 @@ namespace RTX {
                         std::string position;
                         std::string scale;
                         std::string materialId;
+                        std::string tag;
 
                         std::getline(lineStream, position, '/');
                         std::getline(lineStream, scale, '/');
                         std::getline(lineStream, materialId, '/');
+                        std::getline(lineStream, tag, '/');
 
                         // Get x, y and z coords from position param by ','
                         std::stringstream vectorStream(position);
@@ -272,17 +294,19 @@ namespace RTX {
                         int materialIdInt;
                         std::stringstream(materialId) >> materialIdInt;
 
-                        boxes.push_back(Box(glm::vec3(x, y, z), glm::vec3(width, height, length), materialIdInt));
+                        boxes.push_back(Box(glm::vec3(x, y, z), glm::vec3(width, height, length), materialIdInt, tag.c_str()));
                     }
                     else {
                         // Split line to position, scale, materialId by '/'                        
                         std::string position;
                         std::string scale;
                         std::string materialId;
+                        std::string tag;
 
                         std::getline(lineStream, position, '/');
                         std::getline(lineStream, scale, '/');
                         std::getline(lineStream, materialId, '/');
+                        std::getline(lineStream, tag, '/');
 
                         // Get x, y and z coords from position param by ','
                         std::stringstream vectorStream(position);
@@ -309,7 +333,7 @@ namespace RTX {
                         int materialIdInt;
                         std::stringstream(materialId) >> materialIdInt;
 
-                        spheres.push_back(Sphere(glm::vec3(x, y, z), scaleFloat, materialIdInt));
+                        spheres.push_back(Sphere(glm::vec3(x, y, z), scaleFloat, materialIdInt, tag.c_str()));
                     }
                 }
             }
@@ -342,7 +366,7 @@ int main() {
     RTX::FrameBuffer frameBuffer = RTX::FrameBuffer((int)RTX::Window::getSize().x, (int)RTX::Window::getSize().y);
     RTX::FrameBuffer lastFrameBuffer = RTX::FrameBuffer((int)RTX::Window::getSize().x, (int)RTX::Window::getSize().y);
 
-    int skyboxTexture = RTX::Texture::loadFromFile("res/textures/skybox.png", GL_LINEAR);
+    int skyboxTexture = RTX::Texture::loadFromFile("res/textures/night_skybox.jpg", GL_LINEAR);
 
     RTX::Map mapa = RTX::MapParser::parse("res/maps/obby.rtmap");
 
@@ -383,7 +407,7 @@ int main() {
     float loopTime = 0.0f;
     float gravity = 5.0f;
 
-    float focusDistance = 5.0f;
+    float focusDistance = 12.0f;
     float dofBlurSize = 0.05f;
     float fov = 90.0f;
 
@@ -408,10 +432,7 @@ int main() {
             mouseGrabFrame = 0;
         }
 
-        if (player.position.y <= -50.0f) {
-            player.position = glm::vec3(0.0f, 5.0f, 0.0f);
-            player.velocity.y = 0.0f;
-        }
+        if (player.position.y <= -50.0f) player.respawn();
 
         glm::vec3 lastPlayerPos = glm::vec3(player.position);
         glm::vec3 lastPlayerAngle = glm::vec3(player.rotation);
@@ -499,6 +520,7 @@ int main() {
 
         screenProgram.load();
         screenProgram.setUniform("screenResolution", RTX::Window::getSize());
+        screenProgram.setUniform("firstFrame", renderFrame == 1);
 
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, renderToLast ? lastFrameBuffer.getTexture() : frameBuffer.getTexture());
