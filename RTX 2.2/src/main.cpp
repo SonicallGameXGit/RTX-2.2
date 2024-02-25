@@ -407,14 +407,30 @@ int main() {
     float loopTime = 0.0f;
     float gravity = 5.0f;
 
-    float focusDistance = 12.0f;
+    float focusDistance = 12.0f;    
     float dofBlurSize = 0.05f;
     float fov = 90.0f;
 
     glm::vec2 lastWindowSize = RTX::Window::getSize();
 
     RTX::Time time;
+    unsigned int cubeBuffer;
+    unsigned int materialBuffer;
+
+    glGenBuffers(1, &cubeBuffer);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, cubeBuffer);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, cubeBuffer);
+
+    glGenBuffers(1, &materialBuffer);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, materialBuffer);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, materialBuffer);
+
     while (RTX::Window::isRunning()) {
+
+
+
+
+
         RTX::Window::update();
         RTX::Mouse::update();
 
@@ -461,6 +477,7 @@ int main() {
         if (renderToLast) lastFrameBuffer.load();
         else frameBuffer.load();
 
+        // Use compute shaders for love of the god!
         raytraceProgram.load();
         raytraceProgram.setUniform("playerPosition", player.getEyePosition());
         raytraceProgram.setUniform("playerRotation", player.rotation);
@@ -474,21 +491,40 @@ int main() {
         raytraceProgram.setUniform("dofBlurSize", dofBlurSize);
         raytraceProgram.setUniform("fov", fov);
 
+        raytraceProgram.setUniform("boxCount", int(mapa.boxes.size()));
+        std::vector<float> boxes = { };
         for (int i = 0; i < mapa.boxes.size(); i++) {
-            RTX::Box box = mapa.boxes[i];
-            RTX::Material material = mapa.materials[box.materialId];
+            int size = boxes.size();
+            boxes.resize(size + 8);
+            boxes[size] = mapa.boxes[size*0.125].position.x;
+            boxes[size + 1] = mapa.boxes[size * 0.125].position.y;
+            boxes[size + 2] = mapa.boxes[size * 0.125].position.z;
+            boxes[size + 4] = mapa.boxes[size * 0.125].scale.x;
+            boxes[size + 5] = mapa.boxes[size * 0.125].scale.y;
+            boxes[size + 6] = mapa.boxes[size * 0.125].scale.z;
+            boxes[size + 7] = mapa.boxes[size * 0.125].materialId;
+        };
+        raytraceProgram.setUniform("materialCount", int(mapa.boxes.size()));
+        std::vector<float> materials = { };
+        std::vector<float> emissiveCubes = { };
+        for (int i = 0; i < mapa.materials.size(); i++) {
+            int size = materials.size();
+            materials.resize(size + 8);
+            materials[size] = mapa.materials[size * 0.125].color.x;
+            materials[size + 1] = mapa.materials[size * 0.125].color.y;
+            materials[size + 2] = mapa.materials[size * 0.125].color.z;
+            materials[size + 4] = mapa.materials[size * 0.125].diffuse;
+            materials[size + 5] = mapa.materials[size * 0.125].glass;
+            materials[size + 6] = mapa.materials[size * 0.125].glassReflectivity;
+            materials[size + 7] = mapa.materials[size * 0.125].emissive;
+        };
 
-            std::string uniformId = "boxes[" + std::to_string(i) + ']';
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, cubeBuffer);
+        glBufferData(GL_SHADER_STORAGE_BUFFER, boxes.size() * 4, boxes.data(), GL_DYNAMIC_READ);
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, materialBuffer);
+        glBufferData(GL_SHADER_STORAGE_BUFFER, materials.size() * 4, materials.data(), GL_DYNAMIC_READ);
 
-            raytraceProgram.setUniform((uniformId + ".position").c_str(), box.position);
-            raytraceProgram.setUniform((uniformId + ".size").c_str(), box.scale);
-            raytraceProgram.setUniform((uniformId + ".material.color").c_str(), material.color);
-            raytraceProgram.setUniform((uniformId + ".material.diffuse").c_str(), material.diffuse);
-            raytraceProgram.setUniform((uniformId + ".material.glass").c_str(), material.glass);
-            raytraceProgram.setUniform((uniformId + ".material.glassReflectivity").c_str(), material.glassReflectivity);
-            raytraceProgram.setUniform((uniformId + ".material.emissive").c_str(), material.emissive ? 1 : 0);
-        }
-        for (int i = 0; i < mapa.spheres.size(); i++) {
+        for(int i = 0; i < mapa.spheres.size(); i++) {
             RTX::Sphere sphere = mapa.spheres[i];
             RTX::Material material = mapa.materials[sphere.materialId];
 
@@ -517,14 +553,15 @@ int main() {
         glEnd();
 
         RTX::FrameBuffer::unload();
-
+        
+        // Please dont spend your time creating denoising, useless without compute shaders
         screenProgram.load();
         screenProgram.setUniform("screenResolution", RTX::Window::getSize());
         screenProgram.setUniform("firstFrame", renderFrame == 1);
 
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, renderToLast ? lastFrameBuffer.getTexture() : frameBuffer.getTexture());
-
+       
         glBegin(GL_QUADS);
         glVertex2i(-1, -1);
         glVertex2i(1, -1);

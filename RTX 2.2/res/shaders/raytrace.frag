@@ -1,7 +1,8 @@
-#version 330
+#version 430
 #define PI 3.1415926536
 
-#define SUN_COLOR vec3(1.0, 0.8, 0.6) * 5.0 * 0.0
+#define SUN_COLOR vec3(1.0, 0.8, 0.6)
+#define SUN_DISTANCE 10.0
 #define SUN_RADIUS 0.0025
 #define SKY_BRIGHTNESS 0.8
 
@@ -29,6 +30,13 @@ uniform float dofFocusDistance;
 uniform float dofBlurSize;
 uniform float fov;
 
+
+
+
+
+
+
+
 struct Ray {
     vec3 position;
     vec3 direction;
@@ -53,8 +61,20 @@ struct Box {
     vec3 position;
     vec3 size;
 
-    Material material;
+    float materialId;
 };
+
+uniform int boxCount;
+layout(std430,binding = 0) buffer boxBuffer {
+    Box boxes[];
+};
+layout(std430,binding = 1) buffer materialBuffer {
+    float[8] mb[];
+};
+
+Material buildMaterial(int index) {
+    return Material(vec3(mb[index][0],mb[index][1],mb[index][2]),mb[index][4],mb[index][5],mb[index][6],bool(mb[index][7]));
+}
 
 struct HitInfo {
     bool hit;
@@ -67,7 +87,8 @@ struct HitInfo {
     Material material;
 };
 
-uniform Box boxes[BOXES];
+// glaza za takoe vykoly
+//uniform Box boxes[BOXES];
 uniform Sphere spheres[SPHERES];
 
 mat2 rotate(float angle) {
@@ -123,9 +144,9 @@ vec3 sky(Ray ray) {
     skyUv = (skyUv / PI) / 2.0 + 0.5;
 
     vec3 skyColor = texture2D(skyboxSampler, skyUv).rgb;
-    vec3 sunColor = mix(vec3(0.0), SUN_COLOR, pow(clamp(dot(ray.direction, normalize(sunDirection)), 0.0, 1.0), 1.0 / SUN_RADIUS));
+   // vec3 sunColor = mix(vec3(0.0), SUN_COLOR, pow(clamp(dot(ray.direction, normalize(sunDirection)), 0.0, 1.0), 1.0 / SUN_RADIUS));
 
-    return skyColor * SKY_BRIGHTNESS + sunColor;
+    return skyColor * SKY_BRIGHTNESS;
 }
 
 HitInfo checkSphere(Ray ray, Sphere sphere) {
@@ -152,13 +173,13 @@ HitInfo checkBox(Ray ray, Box box) {
     float tF = min(min(t2.x, t2.y), t2.z);
 
     if(tN > tF || tF < 0.0) return NULL_HIT_INFO;
-    return HitInfo(tN >= 0.0, tN, tF, -sign(ray.direction) * step(t1.yzx, t1.xyz) * step(t1.zxy, t1.xyz), box.material);
+    return HitInfo(tN >= 0.0, tN, tF, -sign(ray.direction) * step(t1.yzx, t1.xyz) * step(t1.zxy, t1.xyz), buildMaterial(int(box.materialId)));
 }
 
 HitInfo rayCast(Ray ray) {
     HitInfo hitInfo = HitInfo(false, 1000000.0, 0.0, vec3(0.0), NULL_MATERIAL);
     
-    for(int i = 0; i < BOXES; i++) {
+    for(int i = 0; i < boxCount; i++) {
         HitInfo boxHitInfo = checkBox(ray, boxes[i]);
         if(boxHitInfo.hit && boxHitInfo.distance < hitInfo.distance)
             hitInfo = boxHitInfo;
@@ -173,46 +194,61 @@ HitInfo rayCast(Ray ray) {
 }
 
 vec3 rayTrace(Ray ray, inout float seed) {
+   // Albedo pass
     vec3 color = vec3(1.0);
+    HitInfo hitInfo = rayCast(ray);
+    if(!hitInfo.hit) return sky(ray);
+    if(hitInfo.material.emissive) {return hitInfo.material.color;};
+    color *= hitInfo.material.color;
 
-    for(int i = 0; i < 32; i++) {
-        HitInfo hitInfo = rayCast(ray);
-        if(!hitInfo.hit) return color * sky(ray);
-        //
-        //color *= hitInfo.material.color;
-        //
-        // Kakaya-to dich, neponyatnaya dlya moego mosga
-        //ray.position += ray.direction * (hitInfo.distance - 0.001);
-        //ray.direction = normalize(mix(sunDirection * 10.0, hash3(seed) * 2.0 - 1.0, 0.9));
-        //
-        //hitInfo = rayCast(ray);
-        //if(hitInfo.hit) color *= dot(hitInfo.normal, ray.direction);
-        //return color;
+    // Direct Sun Shadow
+    Ray shadowRay = ray;
+    shadowRay.position += ray.direction * (hitInfo.distance - 0.001);
+    shadowRay.direction = normalize(sunDirection*SUN_DISTANCE+randomSphereDirection(seed));
 
-        color *= hitInfo.material.color;
-        if(hitInfo.material.emissive) return color;
-        
-        float fresnel = pow(clamp(1.0 - dot(hitInfo.normal, -ray.direction), 0.0, 1.0), 1.0 + hitInfo.material.glass);
-        float reflectChance = hash(seed) * (fresnel + hitInfo.material.glassReflectivity);
-        
-        if(hitInfo.material.glass > 0.0 && reflectChance < 0.5) {
-            ray.position += ray.direction * (hitInfo.farDistance - 0.001);
-        
-            vec3 refracted = refract(ray.direction, hitInfo.normal, 1.0 - hitInfo.material.glass);
-            ray.direction = hash3(seed) * 2.0 - 1.0;
-            ray.direction *= sign(dot(ray.direction, -hitInfo.normal));
-            ray.direction = mix(refracted, ray.direction, hitInfo.material.diffuse);
-        } else {
-            ray.position += ray.direction * (hitInfo.distance - 0.001);
-        
-            vec3 reflected = reflect(ray.direction, hitInfo.normal);
-            ray.direction = hash3(seed) * 2.0 - 1.0;
-            ray.direction *= sign(dot(ray.direction, hitInfo.normal));
-            ray.direction = mix(reflected, ray.direction, hitInfo.material.diffuse);
-        }
+     
+
+    vec3 renderPass = vec3(0.0);
+
+    HitInfo hitInfoShadow = rayCast(shadowRay);
+    if (!hitInfoShadow.hit) {
+        renderPass = vec3(dot(hitInfo.normal,shadowRay.direction))*hitInfo.material.diffuse*SUN_COLOR;
     }
 
-    return vec3(0.0);
+   
+    
+    vec3 colorIndirect = vec3(0.0, 0.0, 0.0);
+    vec3 rayColor = vec3(1.0, 1.0, 1.0);
+    // Indirect lighting
+    for (int i = 0;i<4;i++) {
+        // Indirect Albedo
+        vec3 renderPassIndirect = vec3(0.0);
+
+        ray.position += ray.direction * (hitInfo.distance - 0.001);
+        vec3 reflected = reflect(ray.direction, hitInfo.normal);
+        ray.direction = mix(reflected, normalize(hitInfo.normal+randomSphereDirection(seed)), hitInfo.material.diffuse);
+
+        
+        HitInfo hitInfoIndirect = rayCast(ray);
+        if(!hitInfoIndirect.hit) {colorIndirect += sky(ray)*rayColor; break;}
+        if(hitInfoIndirect.material.emissive) {colorIndirect += hitInfoIndirect.material.color;break;}
+        
+        // Indirect Sun Shadow
+        shadowRay.position = ray.position + ray.direction * (hitInfoIndirect.distance - 0.001);
+        shadowRay.direction = normalize(sunDirection*SUN_DISTANCE+randomSphereDirection(seed));
+        HitInfo hitInfoShadowIndirect = rayCast(shadowRay);
+
+        if (!hitInfoShadowIndirect.hit) {
+            renderPassIndirect = vec3(dot(hitInfoIndirect.normal,shadowRay.direction))*hitInfoIndirect.material.diffuse*SUN_COLOR*hitInfoIndirect.material.color;
+        }
+        //hitInfoIndirect.material.color=hitInfo.material.color;
+        hitInfo = hitInfoIndirect;
+
+        colorIndirect += hitInfoIndirect.material.color*renderPassIndirect*rayColor;
+        rayColor*=hitInfoIndirect.material.color;
+    }
+    color *= renderPass+colorIndirect;
+    return color;
 }
 
 vec3 denoise(Ray ray, inout float seed) {
@@ -226,31 +262,35 @@ vec3 denoise(Ray ray, inout float seed) {
 out vec4 fragColor;
 
 void main() {
-    float seed = (uv.x / (screenResolution.x / screenResolution.y) + uv.y) * 392.38 + 3.43121412313 + denoiseFactor;
+    float seed = (uv.x / (screenResolution.x / screenResolution.y) + uv.y) * 392.38 + 3.43121412313;
 
-    Ray ray = Ray(vec3(0.0), normalize(vec3(vec2(uv.x * (screenResolution.x / screenResolution.y), uv.y) * tan(radians(fov) / 2.0), 1.0)));
+    // Ray ray = Ray(vec3(0.0), normalize(vec3(vec2(uv.x * (screenResolution.x / screenResolution.y), uv.y) * tan(radians(fov) / 2.0), 1.0)));
 
-    vec2 randomPoint = randomSphereDirection(seed).xy * dofBlurSize;
+    // vec2 randomPoint = randomSphereDirection(seed).xy * dofBlurSize;
 
-    vec3 focalPoint = ray.direction * dofFocusDistance;
-    vec3 finalDirection = normalize(focalPoint - vec3(randomPoint, 0.0));
+    // vec3 focalPoint = ray.direction * dofFocusDistance;
+    // vec3 finalDirection = normalize(focalPoint - vec3(randomPoint, 0.0));
 
-    ray.position = vec3(randomPoint, 0.0);
-    ray.direction = finalDirection;
+    // ray.position = vec3(randomPoint, 0.0);
+    // ray.direction = finalDirection;
 
-    ray.position.yz *= rotate(-playerRotation.x);
-    ray.position.xz *= rotate(-playerRotation.y);
-    ray.position.zy *= rotate(-playerRotation.z);
+    // ray.position.yz *= rotate(-playerRotation.x);
+    // ray.position.xz *= rotate(-playerRotation.y);
+    // ray.position.zy *= rotate(-playerRotation.z);
 
+    // ray.direction.yz *= rotate(-playerRotation.x);
+    // ray.direction.xz *= rotate(-playerRotation.y);
+    // ray.direction.zy *= rotate(-playerRotation.z);
+
+    // ray.position += playerPosition;
+    Ray ray = Ray(playerPosition, normalize(vec3(uv.x * (screenResolution.x / screenResolution.y) * tan(radians(fov) / 2.0), uv.y * tan(radians(fov) / 2.0), 1.0)));
     ray.direction.yz *= rotate(-playerRotation.x);
     ray.direction.xz *= rotate(-playerRotation.y);
     ray.direction.zy *= rotate(-playerRotation.z);
 
-    ray.position += playerPosition;
-
     fragColor = vec4(denoise(ray, seed), 1.0);
 
-    vec4 lastFrameColor = texture2D(lastFrameSampler, uv / 2.0 + 0.5);
-    if(lastFrameColor.a != 0.0)
-        fragColor = mix(lastFrameColor, fragColor, denoiseFactor);
+    //vec4 lastFrameColor = texture2D(lastFrameSampler, uv / 2.0 + 0.5);
+    //if(lastFrameColor.a != 0.0)
+    //    fragColor = mix(lastFrameColor, fragColor, denoiseFactor);
 }
