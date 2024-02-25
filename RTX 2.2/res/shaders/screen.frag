@@ -10,14 +10,9 @@ uniform int firstFrame;
 void main() {
     gl_FragColor = texture2D(colorSampler, texcoord);
 
-    if(firstFrame == 1) {
-        int blurSize = 4;
-        for(int x = -blurSize / 2; x < blurSize / 2; x++) {
-            for(int y = -blurSize / 2; y < blurSize / 2; y++) {
-                gl_FragColor.rgb += texture2D(colorSampler, texcoord + vec2(x, y) * 2.0 / screenResolution).rgb;
-            }
-        }
+    vec2 uv = texcoord * 2.0 - 1.0;
+    uv.x *= screenResolution.x / screenResolution.y;
 
-        gl_FragColor.rgb /= blurSize * blurSize;
-    }
+    if(uv.x <= 0.001 && uv.x >= -0.001 && uv.y <= 0.01 && uv.y >= -0.01) gl_FragColor.rgb = 1.0 - gl_FragColor.rgb;
+    else if(uv.x <= 0.01 && uv.x >= -0.01 && uv.y <= 0.001 && uv.y >= -0.001) gl_FragColor.rgb = 1.0 - gl_FragColor.rgb;
 }

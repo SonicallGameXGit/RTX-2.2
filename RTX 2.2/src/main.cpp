@@ -1,4 +1,4 @@
-#include <vector>
+﻿#include <vector>
 #include <unordered_map>
 #include "engine/graphics.h"
 #include "engine/math.h"
@@ -10,32 +10,32 @@ namespace RTX {
 
         const float diffuse;
         const float glass;
-        const float glassReflectivity;
+        const float glassReflect;
+
+        const glm::vec4 uvInfo;
 
         const bool emissive;
 
-        Material(glm::vec3 color, float diffuse, float glass, float glassReflectivity, bool emissive) : color(color), diffuse(diffuse), glass(glass), glassReflectivity(glassReflectivity), emissive(emissive) {};
+        Material(glm::vec3 color, float diffuse, float glass, float glassReflect, glm::vec4 uvInfo, bool emissive) : color(color), diffuse(diffuse), glass(glass), glassReflect(glassReflect), uvInfo(uvInfo), emissive(emissive) {};
     };
 
     struct Box {
         glm::vec3 position;
         glm::vec3 scale;
 
-        int materialId;
-
+        int material;
         std::string tag;
 
-        Box(glm::vec3 position, glm::vec3 scale, int materialId, std::string tag) : position(position), scale(scale), materialId(materialId), tag(tag) {}
+        Box(glm::vec3 position, glm::vec3 scale, int material, std::string tag) : position(position), scale(scale), material(material), tag(tag) {}
     };
     struct Sphere {
         glm::vec3 position;
-        float scale;
+        float radius;
 
-        int materialId;
-
+        int material;
         std::string tag;
 
-        Sphere(glm::vec3 position, float scale, int materialId, std::string tag) : position(position), scale(scale), materialId(materialId), tag(tag) {}
+        Sphere(glm::vec3 position, float radius, int material, std::string tag) : position(position), radius(radius), material(material), tag(tag) {}
     };
 
     class Player {
@@ -84,14 +84,22 @@ namespace RTX {
             if (!flyMode) {
                 if (RTX::Keyboard::isPressed(GLFW_KEY_SPACE) && onGround) {
                     velocity.y = jumpHeight;
+                    rawOnGround = false;
                     onGround = false;
                 }
-            }
-            else {
+            } else {
                 if (RTX::Keyboard::isPressed(GLFW_KEY_SPACE))
                     velocity.y += 1.0f;
                 if (RTX::Keyboard::isPressed(GLFW_KEY_LEFT_SHIFT))
                     velocity.y -= 1.0f;
+            }
+
+            if (rawOnGround) {
+                onGround = true;
+                onGroundResetDelayTimer = 0.0f;
+            } else {
+                if (onGroundResetDelayTimer >= onGroundResetDelay) onGround = false;
+                else onGroundResetDelayTimer += time.getDelta();
             }
 
             float horizontalLength = glm::length(glm::vec2(velocity.x, velocity.z));
@@ -101,10 +109,12 @@ namespace RTX {
             }
 
             std::vector<std::string> collidedTags;
+            
+            rawOnGround = false;
 
             position.x += velocity.x * walkSpeed * time.getDelta();
             collidedTags.push_back(checkCollision(boxes, spheres));
-            
+
             if (collidedTags[collidedTags.size() - 1] != "") {
                 position.x -= velocity.x * walkSpeed * time.getDelta();
                 velocity.x = 0.0f;
@@ -116,7 +126,7 @@ namespace RTX {
             if (collidedTags[collidedTags.size() - 1] != "") {
                 position.y -= velocity.y * walkSpeed * time.getDelta();
 
-                if (velocity.y <= 0.0f) onGround = true;
+                if (velocity.y <= 0.0f) rawOnGround = true;
                 velocity.y = std::find(collidedTags.begin(), collidedTags.end(), "jump_pad") != collidedTags.end() ? 7.0f : 0.0f;
             }
 
@@ -132,7 +142,7 @@ namespace RTX {
                 respawn();
 
             rotation.x -= RTX::Mouse::getVelocity().y * rotateSpeed;
-            rotation.x = fmax(fmin(rotation.x, 90.0f), -90.0f);
+            rotation.x = fmax(fmin(rotation.x, 89.99f), -89.99f);
 
             rotation.y += RTX::Mouse::getVelocity().x * rotateSpeed;
             rotation.y -= floor(rotation.y / 360.0f) * 360.0f;
@@ -142,7 +152,11 @@ namespace RTX {
             return glm::vec3(position.x + scale.x / 2.0f, position.y + scale.y - eyeHeight, position.z + scale.z / 2.0f);
         }
     private:
-        bool onGround = false;
+        const float onGroundResetDelay = 0.3f;
+
+        bool rawOnGround = false, onGround = false;
+        float onGroundResetDelayTimer = 0.0f;
+
         glm::vec3 startPosition;
 
         std::string checkCollision(std::vector<Box> boxes, std::vector<Sphere> spheres) const {
@@ -155,8 +169,7 @@ namespace RTX {
                 glm::vec3 nearest(glm::max(glm::min(sphere.position.x, position.x + scale.x), position.x), glm::max(glm::min(sphere.position.y, position.y + scale.y), position.y), glm::max(glm::min(sphere.position.z, position.z + scale.z), position.z));
                 float length = glm::length(glm::vec3(sphere.position.x - nearest.x, sphere.position.y - nearest.y, sphere.position.z - nearest.z));
 
-                if (length * length < sphere.scale * sphere.scale)
-                    return sphere.tag;
+                if (length * length < sphere.radius * sphere.radius) return sphere.tag;
             }
 
             return "";
@@ -194,162 +207,129 @@ namespace RTX {
                 else if (line.starts_with("Boxes")) readMode = BOX;
                 else if (line.starts_with("Spheres")) readMode = SPHERE;
                 else {
+                    if (line == "") continue;
+
                     std::stringstream lineStream(line);
                     if(readMode == MATERIAL) {
-                        // Split line to color, diffuse, glass, glassReflectivity and emissive by '/'                        
-                        std::string color;
-                        std::string diffuse;
-                        std::string glass;
-                        std::string glassReflectivity;
-                        std::string emissive;
+                        std::stringstream vectorStream = getNextStreamSplit(lineStream, '/');
 
-                        std::getline(lineStream, color, '/');
-                        std::getline(lineStream, diffuse, '/');
-                        std::getline(lineStream, glass, '/');
-                        std::getline(lineStream, glassReflectivity, '/');
-                        std::getline(lineStream, emissive, '/');
+                        float red = getNextSplit<float>(vectorStream, ',');
+                        float green = getNextSplit<float>(vectorStream, ',');
+                        float blue = getNextSplit<float>(vectorStream, ',');
 
-                        // Get red, green and blue channels from color param by ','
-                        std::stringstream colorStream(color);
-                        std::string colorParam;
-                        std::stringstream colorParamStream;
+                        float diffuse = getNextSplit<float>(lineStream, '/');
+                        float glass = getNextSplit<float>(lineStream, '/');
+                        float glassReflect = getNextSplit<float>(lineStream, '/');
 
-                        float red, green, blue;
+                        vectorStream = getNextStreamSplit(lineStream, '/');
 
-                        std::getline(colorStream, colorParam, ',');
-                        colorParamStream = std::stringstream(colorParam);
-                        colorParamStream >> red;
+                        float uvX = getNextSplit<float>(vectorStream, ',');
+                        float uvY = getNextSplit<float>(vectorStream, ',');
+                        float uvWidth = getNextSplit<float>(vectorStream, ',');
+                        float uvHeight = getNextSplit<float>(vectorStream, ',');
 
-                        std::getline(colorStream, colorParam, ',');
-                        colorParamStream = std::stringstream(colorParam);
-                        colorParamStream >> green;
+                        bool emissive = getNextSplit(lineStream, '/') == "true";
 
-                        std::getline(colorStream, colorParam, ',');
-                        colorParamStream = std::stringstream(colorParam);
-                        colorParamStream >> blue;
+                        materials.push_back(Material(glm::vec3(red, green, blue), diffuse, glass, glassReflect, glm::vec4(uvX, uvY, uvWidth, uvHeight), emissive));
+                    } else if (readMode == BOX) {
+                        std::stringstream positionStream = getNextStreamSplit(lineStream, '/');
+                        std::stringstream scaleStream = getNextStreamSplit(lineStream, '/');
 
-                        // Get diffuse from diffuse param
-                        float diffuseFloat;
-                        std::stringstream(diffuse) >> diffuseFloat;
+                        float x = getNextSplit<float>(positionStream, ',');
+                        float y = getNextSplit<float>(positionStream, ',');
+                        float z = getNextSplit<float>(positionStream, ',');
 
-                        // Get diffuse from glass param
-                        float glassFloat;
-                        std::stringstream(glass) >> glassFloat;
+                        float width = getNextSplit<float>(scaleStream, ',');
+                        float height = getNextSplit<float>(scaleStream, ',');
+                        float length = getNextSplit<float>(scaleStream, ',');
 
-                        // Get diffuse from glassReflectivity param
-                        float glassReflectivityFloat;
-                        std::stringstream(glassReflectivity) >> glassReflectivityFloat;
+                        int material = getNextSplit<int>(lineStream, '/');
+                        std::string tag = getNextSplit(lineStream, '/');
 
-                        // Get diffuse from emissive param
-                        bool emissiveBoolean = emissive == "true";
+                        boxes.push_back(Box(glm::vec3(x, y, z), glm::vec3(width, height, length), material, tag.c_str()));
+                    } else {
+                        std::stringstream positionStream = getNextStreamSplit(lineStream, '/');
 
-                        materials.push_back(Material(glm::vec3(red, green, blue), diffuseFloat, glassFloat, glassReflectivityFloat, emissiveBoolean));
-                    }
-                    else if (readMode == BOX) {
-                        // Split line to position, scale, materialId by '/'                        
-                        std::string position;
-                        std::string scale;
-                        std::string materialId;
-                        std::string tag;
+                        float x = getNextSplit<float>(positionStream, ',');
+                        float y = getNextSplit<float>(positionStream, ',');
+                        float z = getNextSplit<float>(positionStream, ',');
 
-                        std::getline(lineStream, position, '/');
-                        std::getline(lineStream, scale, '/');
-                        std::getline(lineStream, materialId, '/');
-                        std::getline(lineStream, tag, '/');
+                        float radius = getNextSplit<float>(lineStream, '/');
 
-                        // Get x, y and z coords from position param by ','
-                        std::stringstream vectorStream(position);
-                        std::string vectorParam;
-                        std::stringstream vectorParamStream;
-
-                        float x, y, z;
-
-                        std::getline(vectorStream, vectorParam, ',');
-                        vectorParamStream = std::stringstream(vectorParam);
-                        vectorParamStream >> x;
-
-                        std::getline(vectorStream, vectorParam, ',');
-                        vectorParamStream = std::stringstream(vectorParam);
-                        vectorParamStream >> y;
-
-                        std::getline(vectorStream, vectorParam, ',');
-                        vectorParamStream = std::stringstream(vectorParam);
-                        vectorParamStream >> z;
-
-                        vectorStream = std::stringstream(scale);
-                        float width, height, length;
-
-                        std::getline(vectorStream, vectorParam, ',');
-                        vectorParamStream = std::stringstream(vectorParam);
-                        vectorParamStream >> width;
-
-                        std::getline(vectorStream, vectorParam, ',');
-                        vectorParamStream = std::stringstream(vectorParam);
-                        vectorParamStream >> height;
-
-                        std::getline(vectorStream, vectorParam, ',');
-                        vectorParamStream = std::stringstream(vectorParam);
-                        vectorParamStream >> length;
-
-                        int materialIdInt;
-                        std::stringstream(materialId) >> materialIdInt;
-
-                        boxes.push_back(Box(glm::vec3(x, y, z), glm::vec3(width, height, length), materialIdInt, tag.c_str()));
-                    }
-                    else {
-                        // Split line to position, scale, materialId by '/'                        
-                        std::string position;
-                        std::string scale;
-                        std::string materialId;
-                        std::string tag;
-
-                        std::getline(lineStream, position, '/');
-                        std::getline(lineStream, scale, '/');
-                        std::getline(lineStream, materialId, '/');
-                        std::getline(lineStream, tag, '/');
-
-                        // Get x, y and z coords from position param by ','
-                        std::stringstream vectorStream(position);
-                        std::string vectorParam;
-                        std::stringstream vectorParamStream;
-
-                        float x, y, z;
-
-                        std::getline(vectorStream, vectorParam, ',');
-                        vectorParamStream = std::stringstream(vectorParam);
-                        vectorParamStream >> x;
-
-                        std::getline(vectorStream, vectorParam, ',');
-                        vectorParamStream = std::stringstream(vectorParam);
-                        vectorParamStream >> y;
-
-                        std::getline(vectorStream, vectorParam, ',');
-                        vectorParamStream = std::stringstream(vectorParam);
-                        vectorParamStream >> z;
-
-                        float scaleFloat;
-                        std::stringstream(scale) >> scaleFloat;
-
-                        int materialIdInt;
-                        std::stringstream(materialId) >> materialIdInt;
-
-                        spheres.push_back(Sphere(glm::vec3(x, y, z), scaleFloat, materialIdInt, tag.c_str()));
+                        int material = getNextSplit<int>(lineStream, '/');
+                        std::string tag = getNextSplit(lineStream, '/');
+                        
+                        spheres.push_back(Sphere(glm::vec3(x, y, z), radius, material, tag.c_str()));
                     }
                 }
             }
 
             return Map(materials, boxes, spheres);
         }
+        private:
+            enum ReadMode {
+                MATERIAL, BOX, SPHERE
+            };
 
-        enum ReadMode {
-            MATERIAL, BOX, SPHERE
-        };
+            template<typename T> static T parseString(std::string string) {
+                T result;
+                std::stringstream(string) >> result;
+
+                return result;
+            }
+
+            static std::string getNextSplit(std::stringstream& line, char splitter) {
+                std::string result;
+                std::getline(line, result, splitter);
+
+                return result;
+            }
+            static std::stringstream getNextStreamSplit(std::stringstream& line, char splitter) {
+                std::string split = getNextSplit(line, splitter);
+                return std::stringstream(split);
+            }
+
+            template<typename T> static T getNextSplit(std::stringstream& line, char splitter) {
+                return parseString<T>(getNextSplit(line, splitter));
+            }
+    };
+
+    struct DofRay {
+        glm::vec3 position;
+        glm::vec3 direction;
+
+        float getDistanceOrDefault(Sphere sphere, float _default) {
+            glm::vec3 delta = position - sphere.position;
+
+            float b = glm::dot(delta, direction);
+            float h = b * b - (dot(delta, delta) - sphere.radius * sphere.radius);
+            if (h < 0.0f) return _default;
+
+            return -b - sqrt(h);
+        }
+        float getDistanceOrDefault(Box box, float _default) {
+            glm::vec3 delta = position - box.position - box.scale / 2.0f;
+
+            glm::vec3 m = 1.0f / direction;
+            glm::vec3 n = m * delta;
+            glm::vec3 k = abs(m) * box.scale / 2.0f;
+            glm::vec3 t1 = -n - k;
+            glm::vec3 t2 = -n + k;
+
+            float tN = glm::max(glm::max(t1.x, t1.y), t1.z);
+            float tF = glm::min(glm::min(t2.x, t2.y), t2.z);
+
+            if (tN > tF || tF < 0.0f) return _default;
+            return tN;
+        }
     };
 }
 
 int main() {
-    if (!RTX::Window::create(1920, 1080, "SUPER 3D YOPTA!", true, false))
+    if (!RTX::Window::create(1920, 1080, "SUPER 3D YOPTA!", true, false)) {
+        std::cerr << "Could not create a window...\n";
         return 1;
+    }
 
     RTX::Window::initializeImGui(RTX_IMGUI_THEME_CLASSIC);
 
@@ -366,25 +346,10 @@ int main() {
     RTX::FrameBuffer frameBuffer = RTX::FrameBuffer((int)RTX::Window::getSize().x, (int)RTX::Window::getSize().y);
     RTX::FrameBuffer lastFrameBuffer = RTX::FrameBuffer((int)RTX::Window::getSize().x, (int)RTX::Window::getSize().y);
 
-    int skyboxTexture = RTX::Texture::loadFromFile("res/textures/night_skybox.jpg", GL_LINEAR);
+    int skyboxTexture = RTX::Texture::loadFromFile("res/textures/skybox.png", GL_LINEAR);
+    int albedoTexture = RTX::Texture::loadFromFile("res/textures/albedo.png", GL_LINEAR);
 
     RTX::Map mapa = RTX::MapParser::parse("res/maps/obby.rtmap");
-
-    /*std::vector<RTX::Material> materials;
-    materials.push_back(RTX::Material(glm::vec3(0.9f), 0.9f, 0.0f, 0.0f, false));
-    materials.push_back(RTX::Material(glm::vec3(0.9f, 0.1f, 0.2f), 0.9f, 0.0f, 0.0f, false));
-    materials.push_back(RTX::Material(glm::vec3(0.2f, 0.9f, 0.2f), 0.9f, 0.0f, 0.0f, false));
-    materials.push_back(RTX::Material(glm::vec3(0.2f, 0.5f, 1.0f), 0.01f, 0.15f, 0.4f, false));
-    materials.push_back(RTX::Material(glm::vec3(1.0f, 0.2f, 0.4f), 0.0f, 0.01f, 0.2f, false));
-
-    std::vector<RTX::Box> boxes;
-    boxes.push_back(RTX::Box(glm::vec3(-10.0f, -1.0f, -10.0f), glm::vec3(20.0f, 1.0f, 20.0f), 0));
-    boxes.push_back(RTX::Box(glm::vec3(-10.0f, 0.0f, -10.0f), glm::vec3(20.0f, 10.0f, 1.0f), 1));
-    boxes.push_back(RTX::Box(glm::vec3(-10.0f, 0.0f, -10.0f), glm::vec3(1.0f, 10.0f, 20.0f), 2));
-
-    std::vector<RTX::Sphere> spheres;
-    spheres.push_back(RTX::Sphere(glm::vec3(4.0f, 1.0f, 4.0f), 1.0f, 3));
-    spheres.push_back(RTX::Sphere(glm::vec3(2.0f, 1.0f, 1.0f), 0.5f, 4));*/
 
     RTX::Player player(glm::vec3(-1.5f, 5.0f, -1.5f), glm::vec3(), glm::vec3(0.4f, 1.76f, 0.4f));
 
@@ -410,6 +375,9 @@ int main() {
     float focusDistance = 12.0f;
     float dofBlurSize = 0.05f;
     float fov = 90.0f;
+
+    float rawDynamicFocusDistance = 0.0f;
+    float dynamicFocusDistance = 0.0f;
 
     glm::vec2 lastWindowSize = RTX::Window::getSize();
 
@@ -439,8 +407,6 @@ int main() {
 
         if(RTX::Mouse::isGrabbed()) player.update(time, gravity, mapa.boxes, mapa.spheres);
 
-        //world.update(lastPlayerPos, lastPlayerAngle, player);
-
         time.update();
 
         shaderUpdateTime += time.getDelta();
@@ -460,7 +426,7 @@ int main() {
 
         if (renderToLast) lastFrameBuffer.load();
         else frameBuffer.load();
-
+        
         raytraceProgram.load();
         raytraceProgram.setUniform("playerPosition", player.getEyePosition());
         raytraceProgram.setUniform("playerRotation", player.rotation);
@@ -470,13 +436,14 @@ int main() {
         raytraceProgram.setUniform("denoiseFactor", 1.0f / (float) renderFrame);
         raytraceProgram.setUniform("lastFrameSampler", 0);
         raytraceProgram.setUniform("skyboxSampler", 1);
-        raytraceProgram.setUniform("dofFocusDistance", focusDistance);
+        raytraceProgram.setUniform("albedoSampler", 2);
         raytraceProgram.setUniform("dofBlurSize", dofBlurSize);
         raytraceProgram.setUniform("fov", fov);
 
+        rawDynamicFocusDistance = focusDistance;
         for (int i = 0; i < mapa.boxes.size(); i++) {
             RTX::Box box = mapa.boxes[i];
-            RTX::Material material = mapa.materials[box.materialId];
+            RTX::Material material = mapa.materials[box.material];
 
             std::string uniformId = "boxes[" + std::to_string(i) + ']';
 
@@ -485,21 +452,23 @@ int main() {
             raytraceProgram.setUniform((uniformId + ".material.color").c_str(), material.color);
             raytraceProgram.setUniform((uniformId + ".material.diffuse").c_str(), material.diffuse);
             raytraceProgram.setUniform((uniformId + ".material.glass").c_str(), material.glass);
-            raytraceProgram.setUniform((uniformId + ".material.glassReflectivity").c_str(), material.glassReflectivity);
+            raytraceProgram.setUniform((uniformId + ".material.glassReflectivity").c_str(), material.glassReflect);
+            raytraceProgram.setUniform((uniformId + ".material.uvInfo").c_str(), material.uvInfo);
             raytraceProgram.setUniform((uniformId + ".material.emissive").c_str(), material.emissive ? 1 : 0);
         }
         for (int i = 0; i < mapa.spheres.size(); i++) {
             RTX::Sphere sphere = mapa.spheres[i];
-            RTX::Material material = mapa.materials[sphere.materialId];
+            RTX::Material material = mapa.materials[sphere.material];
 
             std::string uniformId = "spheres[" + std::to_string(i) + ']';
 
             raytraceProgram.setUniform((uniformId + ".position").c_str(), sphere.position);
-            raytraceProgram.setUniform((uniformId + ".radius").c_str(), sphere.scale);
+            raytraceProgram.setUniform((uniformId + ".radius").c_str(), sphere.radius);
             raytraceProgram.setUniform((uniformId + ".material.color").c_str(), material.color);
             raytraceProgram.setUniform((uniformId + ".material.diffuse").c_str(), material.diffuse);
             raytraceProgram.setUniform((uniformId + ".material.glass").c_str(), material.glass);
-            raytraceProgram.setUniform((uniformId + ".material.glassReflectivity").c_str(), material.glassReflectivity);
+            raytraceProgram.setUniform((uniformId + ".material.glassReflect").c_str(), material.glassReflect);
+            raytraceProgram.setUniform((uniformId + ".material.uvInfo").c_str(), material.uvInfo);
             raytraceProgram.setUniform((uniformId + ".material.emissive").c_str(), material.emissive ? 1 : 0);
         }
 
@@ -508,6 +477,9 @@ int main() {
 
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, skyboxTexture);
+
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D, albedoTexture);
 
         glBegin(GL_QUADS);
         glVertex2i(-1, -1);
@@ -548,7 +520,7 @@ int main() {
             ImGui::Begin("Shader Editor");
 
             ImGui::Text("Player");
-            ImGui::DragFloat("Walk Speed", &player.walkSpeed, 0.005f, 0.005f, 2.0f);
+            ImGui::DragFloat("Walk Speed", &player.walkSpeed, 0.005f, 0.005f, 20.0f);
             ImGui::DragFloat("Rotate Speed", &player.rotateSpeed, 0.005f, 0.005f, 0.2f);
             ImGui::DragFloat("Jump Height", &player.jumpHeight, 0.005f, 0.005f, 20.0f);
             ImGui::Checkbox("Fly Mode", &player.flyMode);

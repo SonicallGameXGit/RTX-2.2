@@ -192,6 +192,9 @@ void RTX::ShaderProgram::setUniform(const char* id, glm::vec2 value) const {
 void RTX::ShaderProgram::setUniform(const char* id, glm::vec3 value) const {
 	glUniform3f(glGetUniformLocation(this->id, id), value.x, value.y, value.z);
 }
+void RTX::ShaderProgram::setUniform(const char* id, glm::vec4 value) const {
+	glUniform4f(glGetUniformLocation(this->id, id), value.x, value.y, value.z, value.w);
+}
 
 void RTX::FrameBuffer::unload() {
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -246,10 +249,7 @@ int RTX::Texture::loadFromFile(const char* location, int filter) {
 	int width, height, channels;
 	unsigned char* image = stbi_load(location, &width, &height, &channels, 0);
 
-	if (!image) {
-		std::cerr << "Could not open image: \"" << location << "\"";
-		exit(1);
-	}
+	if (!image) throw std::runtime_error(("Could not open image: \"" + std::string(location) + "\""));
 
 	GLuint textureId;
 	glGenTextures(1, &textureId);
@@ -264,8 +264,8 @@ int RTX::Texture::loadFromFile(const char* location, int filter) {
 
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 
 	glBindTexture(GL_TEXTURE_2D, 0);
 

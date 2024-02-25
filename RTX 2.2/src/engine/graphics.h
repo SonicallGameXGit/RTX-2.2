@@ -65,6 +65,7 @@ namespace RTX {
 		void setUniform(const char* id, float value) const;
 		void setUniform(const char* id, glm::vec2 value) const;
 		void setUniform(const char* id, glm::vec3 value) const;
+		void setUniform(const char* id, glm::vec4 value) const;
 	private:
 		int id;
 		std::vector<Shader> shaders;
