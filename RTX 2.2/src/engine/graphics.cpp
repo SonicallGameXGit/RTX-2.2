@@ -1,8 +1,8 @@
 #include "graphics.h"
 
-GLFWwindow* RTX::Window::window = nullptr;
+GLFWwindow* TT::Window::window = nullptr;
 
-bool RTX::Window::create(int width, int height, const char* title, bool resizable, bool verticalSync) {
+bool TT::Window::create(int width, int height, const char* title, bool resizable, bool verticalSync) {
 	if (!glfwInit()) {
 		std::cerr << "Poshel k cherty, glfw ne rabotaet!\n";
 		return false;
@@ -30,73 +30,71 @@ bool RTX::Window::create(int width, int height, const char* title, bool resizabl
 	glfwSwapInterval(verticalSync);
 	glfwShowWindow(window);
 
-	if (glewInit() != GLEW_OK) {
-		std::cerr << "Tvoy glew koncheny, ne rabotayet - LOH!\n";
-		return false;
-	}
+	if (glewInit() != GLEW_OK)
+		throw std::runtime_error("Tvoy glew koncheny, ne rabotayet - LOH!\n");
 
 	return true;
 }
-void RTX::Window::update() {
+void TT::Window::update() {
 	glfwSwapBuffers(window);
 	glfwPollEvents();
 
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 }
-void RTX::Window::close() {
+void TT::Window::close() {
 	glfwDestroyWindow(window);
 	glfwTerminate();
 }
 
-void RTX::Window::setTitle(const char* title) {
+void TT::Window::setTitle(const char* title) {
 	glfwSetWindowTitle(window, title);
 }
 
-void RTX::Window::initializeImGui(unsigned int theme) {
+void TT::Window::initializeImGui(unsigned int theme) {
 	IMGUI_CHECKVERSION();
 
 	ImGui::CreateContext();
 
-	if (theme == RTX_IMGUI_THEME_DARK) ImGui::StyleColorsDark();
-	else if (theme == RTX_IMGUI_THEME_LIGHT) ImGui::StyleColorsLight();
-	else if (theme == RTX_IMGUI_THEME_CLASSIC) ImGui::StyleColorsClassic();
+	if (theme == TT_IMGUI_THEME_DARK) ImGui::StyleColorsDark();
+	else if (theme == TT_IMGUI_THEME_LIGHT) ImGui::StyleColorsLight();
+	else if (theme == TT_IMGUI_THEME_CLASSIC) ImGui::StyleColorsClassic();
 
 	ImGui_ImplGlfw_InitForOpenGL(window, true);
 	ImGui_ImplOpenGL3_Init("#version 120");
 }
-void RTX::Window::beginImGui() {
+void TT::Window::beginImGui() {
 	ImGui_ImplOpenGL3_NewFrame();
 	ImGui_ImplGlfw_NewFrame();
 
 	ImGui::NewFrame();
 }
-void RTX::Window::endImGui() {
+void TT::Window::endImGui() {
 	ImGui::Render();
 	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 }
-void RTX::Window::clearImGui() {
+void TT::Window::clearImGui() {
 	ImGui_ImplOpenGL3_Shutdown();
 	ImGui_ImplGlfw_Shutdown();
 
 	ImGui::DestroyContext();
 }
 
-bool RTX::Window::isRunning() {
+bool TT::Window::isRunning() {
 	return !glfwWindowShouldClose(window);
 }
 
-glm::vec2 RTX::Window::getSize() {
+glm::vec2 TT::Window::getSize() {
 	int width = 0, height = 0;
 	glfwGetWindowSize(window, &width, &height);
 
 	return glm::vec2(width, height);
 }
 
-GLFWwindow* RTX::Window::getId() {
+GLFWwindow* TT::Window::getId() {
 	return window;
 }
 
-RTX::Shader::Shader(const char* location, GLenum type) {
+TT::Shader::Shader(const char* location, GLenum type) {
 	std::ifstream stream(location);
 	std::string code{ std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>() };
 
@@ -117,22 +115,22 @@ RTX::Shader::Shader(const char* location, GLenum type) {
 	}
 }
 
-void RTX::Shader::clear() const {
+void TT::Shader::clear() const {
 	glDeleteShader(id);
 }
-int RTX::Shader::getId() const {
+int TT::Shader::getId() const {
 	return id;
 }
 
-RTX::ShaderProgram::ShaderProgram() {
+TT::ShaderProgram::ShaderProgram() {
 	id = glCreateProgram();
 }
 
-void RTX::ShaderProgram::addShader(Shader shader) {
+void TT::ShaderProgram::addShader(Shader shader) {
 	shaders.push_back(shader);
 	glAttachShader(id, shader.getId());
 }
-bool RTX::ShaderProgram::compile() const {
+bool TT::ShaderProgram::compile() const {
 	bool success = true;
 
 	glLinkProgram(id);
@@ -165,13 +163,13 @@ bool RTX::ShaderProgram::compile() const {
 	return success;
 }
 
-void RTX::ShaderProgram::load() const {
+void TT::ShaderProgram::load() const {
 	glUseProgram(id);
 }
-void RTX::ShaderProgram::unload() {
+void TT::ShaderProgram::unload() {
 	glUseProgram(0);
 }
-void RTX::ShaderProgram::clear() const {
+void TT::ShaderProgram::clear() const {
 	for (auto& shader : shaders) {
 		glDetachShader(id, shader.getId());
 		shader.clear();
@@ -180,28 +178,28 @@ void RTX::ShaderProgram::clear() const {
 	glDeleteProgram(id);
 }
 
-void RTX::ShaderProgram::setUniform(const char* id, int value) const {
+void TT::ShaderProgram::setUniform(const char* id, int value) const {
 	glUniform1i(glGetUniformLocation(this->id, id), value);
 }
-void RTX::ShaderProgram::setUniform(const char* id, float value) const {
+void TT::ShaderProgram::setUniform(const char* id, float value) const {
 	glUniform1f(glGetUniformLocation(this->id, id), value);
 }
-void RTX::ShaderProgram::setUniform(const char* id, glm::vec2 value) const {
+void TT::ShaderProgram::setUniform(const char* id, glm::vec2 value) const {
 	glUniform2f(glGetUniformLocation(this->id, id), value.x, value.y);
 }
-void RTX::ShaderProgram::setUniform(const char* id, glm::vec3 value) const {
+void TT::ShaderProgram::setUniform(const char* id, glm::vec3 value) const {
 	glUniform3f(glGetUniformLocation(this->id, id), value.x, value.y, value.z);
 }
-void RTX::ShaderProgram::setUniform(const char* id, glm::vec4 value) const {
+void TT::ShaderProgram::setUniform(const char* id, glm::vec4 value) const {
 	glUniform4f(glGetUniformLocation(this->id, id), value.x, value.y, value.z, value.w);
 }
 
-void RTX::FrameBuffer::unload() {
+void TT::FrameBuffer::unload() {
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 	glViewport(0, 0, (int)Window::getSize().x, (int)Window::getSize().y);
 }
 
-RTX::FrameBuffer::FrameBuffer(int width, int height) {
+TT::FrameBuffer::FrameBuffer(int width, int height) {
 	this->width = width;
 	this->height = height;
 
@@ -222,34 +220,34 @@ RTX::FrameBuffer::FrameBuffer(int width, int height) {
 	unload();
 }
 
-void RTX::FrameBuffer::load() const {
+void TT::FrameBuffer::load() const {
 	glBindFramebuffer(GL_FRAMEBUFFER, fboId);
 	
 	glViewport(0, 0, width, height);
 	glClear(GL_COLOR_BUFFER_BIT);
 }
-void RTX::FrameBuffer::clear() const {
+void TT::FrameBuffer::clear() const {
 	glDeleteFramebuffers(1, &fboId);
 	glDeleteTextures(1, &textureId);
 }
 
-int RTX::FrameBuffer::getTexture() const {
+int TT::FrameBuffer::getTexture() const {
 	return textureId;
 }
-int RTX::FrameBuffer::getWidth() const {
+int TT::FrameBuffer::getWidth() const {
 	return width;
 }
-int RTX::FrameBuffer::getHeight() const {
+int TT::FrameBuffer::getHeight() const {
 	return height;
 }
 
-int RTX::Texture::loadFromFile(const char* location, int filter) {
+int TT::Texture::loadFromFile(const char* location, GLint filter) {
 	stbi_set_flip_vertically_on_load(true);
 
 	int width, height, channels;
 	unsigned char* image = stbi_load(location, &width, &height, &channels, 0);
 
-	if (!image) throw std::runtime_error(("Could not open image: \"" + std::string(location) + "\""));
+	if (!image) std::cerr << "Could not open image: \"" << location << '\"';
 
 	GLuint textureId;
 	glGenTextures(1, &textureId);
@@ -272,4 +270,15 @@ int RTX::Texture::loadFromFile(const char* location, int filter) {
 	stbi_image_free(image);
 
 	return textureId;
+}
+
+void TT::Texture::load(GLuint texture, int id) {
+	glActiveTexture(GL_TEXTURE0 + id);
+	glBindTexture(GL_TEXTURE_2D, texture);
+}
+void TT::Texture::unload() {
+	glBindTexture(GL_TEXTURE_2D, 0);
+}
+void TT::Texture::clear(GLuint texture) {
+	glDeleteTextures(1, &texture);
 }

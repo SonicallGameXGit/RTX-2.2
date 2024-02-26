@@ -1,7 +1,7 @@
 #pragma once
 #include "graphics.h"
 
-namespace RTX {
+namespace TT {
 	class Keyboard {
 	public:
 		static bool isPressed(int key);

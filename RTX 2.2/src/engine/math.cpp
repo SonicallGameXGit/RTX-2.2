@@ -1,12 +1,12 @@
 #include "math.h"
 
-RTX::Time::Time() {
+TT::Time::Time() {
 	lastTime = (float) glfwGetTime();
 	delta = 0.0f;
 	time = 0.0f;
 }
 
-void RTX::Time::update() {
+void TT::Time::update() {
 	float time = (float) glfwGetTime();
 	delta = time - lastTime;
 	lastTime = time;
@@ -14,9 +14,9 @@ void RTX::Time::update() {
 	this->time += delta;
 }
 
-float RTX::Time::getDelta() {
+float TT::Time::getDelta() {
 	return delta;
 }
-float RTX::Time::getTime() {
+float TT::Time::getTime() {
 	return time;
 }

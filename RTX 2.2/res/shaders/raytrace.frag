@@ -1,7 +1,7 @@
 #version 330
 #define PI 3.1415926536
 
-#define SUN_COLOR vec3(1.0, 0.4, 0.2) * 30.0
+#define SUN_COLOR vec3(1.0, 0.4, 0.2) * 30.0 * 1.0
 #define SUN_RADIUS 0.007
 #define SKY_BRIGHTNESS 0.8
 
@@ -22,6 +22,7 @@ uniform vec2 screenResolution;
 uniform sampler2D lastFrameSampler;
 uniform sampler2D skyboxSampler;
 uniform sampler2D albedoSampler;
+uniform sampler2D normalSampler;
 
 uniform float randomOffset;
 uniform float denoiseFactor;
@@ -188,7 +189,24 @@ vec3 rayTrace(Ray ray, inout float seed) {
         if(!hitInfo.hit) return color * sky(ray);
 
         color *= hitInfo.material.color;
-        if(length(hitInfo.uv) > 0.0) color *= texture2D(albedoSampler, hitInfo.uv).rgb;
+        if(length(hitInfo.uv) > 0.0) {
+            color *= texture2D(albedoSampler, hitInfo.uv).rgb;
+
+            vec3 texturedNormal = texture2D(normalSampler, hitInfo.uv).rgb * 2.0 - 1.0;
+            vec3 tangent = hitInfo.normal;
+            tangent.yx *= rotate(-90.0);
+
+            vec3 bitangent = hitInfo.normal;
+            bitangent.yz *= rotate(90.0);
+
+            mat3 tangentMatrix = mat3(
+                tangent.x, bitangent.x, hitInfo.normal.x,
+                tangent.y, bitangent.y, hitInfo.normal.y,
+                tangent.z, bitangent.z, hitInfo.normal.z
+            );
+
+            hitInfo.normal = normalize(texturedNormal * tangentMatrix);
+        }
 
         if(hitInfo.material.emissive) return color;
         

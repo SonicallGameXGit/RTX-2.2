@@ -14,11 +14,11 @@
 #include "../imgui/imgui_impl_opengl3.h"
 #include "../stb/stb_image.h"
 
-#define RTX_IMGUI_THEME_DARK 0
-#define RTX_IMGUI_THEME_LIGHT 1
-#define RTX_IMGUI_THEME_CLASSIC 2
+#define TT_IMGUI_THEME_DARK 0
+#define TT_IMGUI_THEME_LIGHT 1
+#define TT_IMGUI_THEME_CLASSIC 2
 
-namespace RTX {
+namespace TT {
 	class Window {
 	public:
 		static bool create(int width, int height, const char* title, bool resizable, bool verticalSync);
@@ -88,6 +88,10 @@ namespace RTX {
 	};
 	class Texture {
 	public:
-		static int loadFromFile(const char* location, int filter);
+		static int loadFromFile(const char* location, GLint filter);
+		
+		static void load(GLuint texture, int id);
+		static void unload();
+		static void clear(GLuint texture);
 	};
 }
