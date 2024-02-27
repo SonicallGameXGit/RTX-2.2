@@ -12,6 +12,8 @@ int main() {
         std::cerr << "Could not create a window...\n";
         return 1;
     }
+    
+    TT::AudioSystem::initialize();
 
     TT::Window::initializeImGui(TT_IMGUI_THEME_LIGHT);
 
@@ -29,6 +31,10 @@ int main() {
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    ALuint musicSound = TT::AudioSystem::loadFromFile("res/sounds/music.ogg");
+    TT::SoundSource musicSoundSource(musicSound);
+    musicSoundSource.play(0.5f, 1.0f, true);
 
     int frame = 0;
     int mouseGrabFrame = 0;
@@ -91,6 +97,13 @@ int main() {
 
     RTX::World::clear();
     RTX::Denoiser::clear();
+
+    player.clear();
+
+    musicSoundSource.clear();
+
+    TT::AudioSystem::clear(musicSound);
+    TT::AudioSystem::clear();
 
     TT::Window::clearImGui();
     TT::Window::close();

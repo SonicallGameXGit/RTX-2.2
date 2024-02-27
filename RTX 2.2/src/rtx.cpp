@@ -152,14 +152,29 @@ void RTX::World::clear() {
 }
 
 const float RTX::Player::onGroundResetDelay = 0.3f;
+const float RTX::Player::stepSpeed = 0.5f;
 
-RTX::Player::Player(glm::vec3 position, glm::vec3 rotation, glm::vec3 scale) {
+RTX::Player::Player(glm::vec3 position, glm::vec3 rotation, glm::vec3 scale) : stepSoundSource(TT::SoundSource()), stepSounds(new ALuint[3]), blyaSound(TT::AudioSystem::loadFromFile("res/sounds/blya.ogg")), blyaSoundSource(TT::SoundSource(blyaSound)) {
+    walkSpeed = 6.0f;
+    rotateSpeed = 0.09f;
+    jumpHeight = 8.0f;
+    eyeHeight = 0.2f;
+
+    stepTimer = 0.0f;
+    onGroundResetDelayTimer = 0.0f;
+
+    flyMode = false;
+    
     this->position = glm::vec3(position);
     this->rotation = glm::vec3(rotation);
     this->scale = glm::vec3(scale);
 
     velocity = glm::vec3();
     startPosition = glm::vec3(position);
+
+    stepSounds[0] = TT::AudioSystem::loadFromFile("res/sounds/player/step0.ogg");
+    stepSounds[1] = TT::AudioSystem::loadFromFile("res/sounds/player/step1.ogg");
+    stepSounds[2] = TT::AudioSystem::loadFromFile("res/sounds/player/step2.ogg");
 }
 
 void RTX::Player::respawn() {
@@ -213,9 +228,20 @@ void RTX::Player::update(TT::Time time) {
     }
 
     float horizontalLength = glm::length(glm::vec2(velocity.x, velocity.z));
-    if (horizontalLength > 0.0f) {
+    if (horizontalLength > 0.01f) {
         velocity.x /= horizontalLength;
         velocity.z /= horizontalLength;
+
+        if (onGround) {
+            if (stepTimer == 0.0f) {
+                stepSoundSource.setSound(stepSounds[rand() % 3]);
+                stepSoundSource.play(1.5f, 1.0f, false);
+            }
+
+            stepTimer += stepSpeed * time.getDelta();
+            if (stepTimer >= 1.0f / walkSpeed) stepTimer = 0.0f;
+        }
+        else stepTimer = 0.0f;
     }
 
     std::vector<std::string> collidedTags;
@@ -241,6 +267,7 @@ void RTX::Player::update(TT::Time time) {
             velocity.y = onJumpPad ? 50.0f : 0.0f;
 
             if (!onJumpPad) rawOnGround = true;
+            else blyaSoundSource.play(0.8f, 1.0f, false);
         }
     }
 
@@ -260,6 +287,16 @@ void RTX::Player::update(TT::Time time) {
 
     rotation.y += TT::Mouse::getVelocity().x * rotateSpeed;
     rotation.y -= floor(rotation.y / 360.0f) * 360.0f;
+}
+void RTX::Player::clear() {
+    TT::AudioSystem::clear(stepSounds[0]);
+    TT::AudioSystem::clear(stepSounds[1]);
+    TT::AudioSystem::clear(stepSounds[2]);
+
+    stepSoundSource.stop();
+    stepSoundSource.clear();
+
+    delete[] stepSounds;
 }
 
 glm::vec3 RTX::Player::getEyePosition() {

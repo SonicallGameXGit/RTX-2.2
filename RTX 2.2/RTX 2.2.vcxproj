@@ -71,8 +71,8 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <IncludePath>$(SolutionDir)libraries\GLEW\include;$(SolutionDir)libraries\GLFW\include;$(SolutionDir)libraries\GLM\include;$(IncludePath)</IncludePath>
-    <LibraryPath>$(SolutionDir)libraries\GLEW\lib;$(SolutionDir)libraries\GLFW\lib;$(LibraryPath)</LibraryPath>
+    <IncludePath>$(SolutionDir)libraries\GLEW\include;$(SolutionDir)libraries\GLFW\include;$(SolutionDir)libraries\GLM\include;$(SolutionDir)libraries\OpenAL\include;$(IncludePath)</IncludePath>
+    <LibraryPath>$(SolutionDir)libraries\GLEW\lib;$(SolutionDir)libraries\GLFW\lib;$(SolutionDir)libraries\OpenAL\lib;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -108,14 +108,14 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;GLEW_STATIC;_CRT_SECURE_NO_WARNINGS;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>D:\C++ Projects\RTX Stuff\libraries;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>D:\C++ Projects\RTX Stuff\libraries;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>opengl32.lib;glfw3.lib;glew32s.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>opengl32.lib;glfw3.lib;glew32s.lib;OpenAL32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -135,6 +135,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="src\engine\audio.cpp" />
     <ClCompile Include="src\engine\graphics.cpp" />
     <ClCompile Include="src\engine\input.cpp" />
     <ClCompile Include="src\engine\math.cpp" />
@@ -147,8 +148,10 @@
     <ClCompile Include="src\main.cpp" />
     <ClCompile Include="src\rtx.cpp" />
     <ClCompile Include="src\stb\stb_image.cpp" />
+    <ClCompile Include="src\stb\stb_vorbis.c" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="src\engine\audio.h" />
     <ClInclude Include="src\engine\graphics.h" />
     <ClInclude Include="src\engine\input.h" />
     <ClInclude Include="src\engine\math.h" />

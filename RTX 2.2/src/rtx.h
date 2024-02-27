@@ -2,6 +2,7 @@
 #include "engine/graphics.h"
 #include "engine/input.h"
 #include "engine/math.h"
+#include "engine/audio.h"
 
 namespace RTX {
     struct Material {
@@ -76,22 +77,29 @@ namespace RTX {
 
     class Player {
     public:
-        float walkSpeed = 6.0f, rotateSpeed = 0.09f, jumpHeight = 8.0f, eyeHeight = 0.2f;
+        float walkSpeed, rotateSpeed, jumpHeight, eyeHeight;
         glm::vec3 position, rotation, scale, velocity;
 
-        bool flyMode = false;
+        bool flyMode;
 
         Player(glm::vec3 position, glm::vec3 rotation, glm::vec3 scale);
 
         void respawn();
         void update(TT::Time time);
+        void clear();
 
         glm::vec3 getEyePosition();
     private:
-        const static float onGroundResetDelay;
+        const static float onGroundResetDelay, stepSpeed;
+
+        ALuint* const stepSounds;
+        const ALuint blyaSound;
+
+        TT::SoundSource blyaSoundSource;
+        TT::SoundSource stepSoundSource;
 
         bool rawOnGround = false, onGround = false;
-        float onGroundResetDelayTimer = 0.0f;
+        float onGroundResetDelayTimer, stepTimer;
 
         glm::vec3 startPosition;
 

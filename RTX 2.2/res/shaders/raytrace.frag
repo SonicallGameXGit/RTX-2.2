@@ -250,7 +250,7 @@ void main() {
 
     vec2 randomPoint = randomSphereDirection(seed).xy * dofBlurSize;
 
-    Ray focusRay = Ray(playerPosition, vec3(0.0, 0.0, 1.0));
+    Ray focusRay = Ray(playerPosition, vec3(randomPoint * 0.01, 1.0));
     focusRay.direction.yz *= rotate(-playerRotation.x);
     focusRay.direction.xz *= rotate(-playerRotation.y);
     focusRay.direction.zy *= rotate(-playerRotation.z);
