@@ -41,18 +41,11 @@ void TT::AudioSystem::clear(ALuint sound) {
 TT::SoundSource::SoundSource() {
 	alGenSources(1, &id);
 }
-TT::SoundSource::SoundSource(ALuint sound) {
-	alGenSources(1, &id);
-	setSound(sound);
-}
 
-void TT::SoundSource::setSound(ALuint sound) const {
-	alSourcei(id, AL_BUFFER, sound);
-}
-
-void TT::SoundSource::play(float volume, float pitch, bool loop) const {
+void TT::SoundSource::play(ALuint sound, float volume, float pitch, bool loop) const {
 	stop();
 
+	alSourcei(id, AL_BUFFER, sound);
 	alSourcef(id, AL_GAIN, volume);
 	alSourcef(id, AL_PITCH, pitch);
 	alSourcei(id, AL_LOOPING, loop);

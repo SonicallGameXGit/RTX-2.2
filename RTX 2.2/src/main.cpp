@@ -17,9 +17,9 @@ int main() {
 
     TT::Window::initializeImGui(TT_IMGUI_THEME_LIGHT);
 
-    RTX::World::initialize("obby", 25.0f, glm::vec3(-1.0f, 1.0f, -0.175f));
+    RTX::World::initialize("old", 25.0f, glm::vec3(-1.0f, 1.0f, -0.175f));
     RTX::Camera::initialize(0.05f, 12.0f, 90.0f);
-    RTX::Denoiser::initialize(TT::Window::getSize());
+    RTX::Renderer::initialize(TT::Window::getSize());
 
     RTX::Player player(glm::vec3(-1.5f, 5.0f, -1.5f), glm::vec3(), glm::vec3(0.4f, 1.76f, 0.4f));
 
@@ -33,8 +33,8 @@ int main() {
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     ALuint musicSound = TT::AudioSystem::loadFromFile("res/sounds/music.ogg");
-    TT::SoundSource musicSoundSource(musicSound);
-    musicSoundSource.play(0.5f, 1.0f, true);
+    TT::SoundSource musicSoundSource;
+    musicSoundSource.play(musicSound, 0.05f, 1.0f, true);
 
     int frame = 0;
     int mouseGrabFrame = 0;
@@ -46,7 +46,7 @@ int main() {
         TT::Window::update();
         TT::Mouse::update();
 
-        RTX::Denoiser::render(time, player);
+        RTX::Renderer::render(time, player);
 
         frame++;
         if (TT::Keyboard::isPressed(GLFW_KEY_ESCAPE)) {
@@ -82,8 +82,6 @@ int main() {
 
         TT::Window::endImGui();
 
-        if (lastPlayerPos != player.position || lastPlayerAngle != player.rotation) RTX::Denoiser::reset();
-
         glm::vec2 windowSize = TT::Window::getSize();
         if (lastWindowSize != windowSize) {
             lastWindowSize = glm::vec2(windowSize);
@@ -91,12 +89,12 @@ int main() {
             if (RTX::DebugHud::getFrameScaleMode()) windowSize *= RTX::DebugHud::getFrameScale();
             else windowSize /= RTX::DebugHud::getFrameScale();
 
-            RTX::Denoiser::resize(windowSize);
+            RTX::Renderer::resize(windowSize);
         }
     }
 
     RTX::World::clear();
-    RTX::Denoiser::clear();
+    RTX::Renderer::clear();
 
     player.clear();
 

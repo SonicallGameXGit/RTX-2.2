@@ -154,20 +154,24 @@ void RTX::World::clear() {
 const float RTX::Player::onGroundResetDelay = 0.3f;
 const float RTX::Player::stepSpeed = 0.5f;
 
-RTX::Player::Player(glm::vec3 position, glm::vec3 rotation, glm::vec3 scale) : stepSoundSource(TT::SoundSource()), stepSounds(new ALuint[3]), blyaSound(TT::AudioSystem::loadFromFile("res/sounds/blya.ogg")), blyaSoundSource(TT::SoundSource(blyaSound)) {
+RTX::Player::Player(glm::vec3 position, glm::vec3 rotation, glm::vec3 scale) : stepSoundSource(TT::SoundSource()), stepSounds(new ALuint[3]), blyaSound(TT::AudioSystem::loadFromFile("res/sounds/blya.ogg")) {
     walkSpeed = 6.0f;
     rotateSpeed = 0.09f;
     jumpHeight = 8.0f;
     eyeHeight = 0.2f;
+    cinematicSharpness = 2.0f;
 
     stepTimer = 0.0f;
     onGroundResetDelayTimer = 0.0f;
 
     flyMode = false;
+    cinematicMode = false;
     
     this->position = glm::vec3(position);
     this->rotation = glm::vec3(rotation);
     this->scale = glm::vec3(scale);
+
+    rawRotation = glm::vec3(rotation);
 
     velocity = glm::vec3();
     startPosition = glm::vec3(position);
@@ -212,10 +216,8 @@ void RTX::Player::update(TT::Time time) {
         }
     }
     else {
-        if (TT::Keyboard::isPressed(GLFW_KEY_SPACE))
-            velocity.y += 1.0f;
-        if (TT::Keyboard::isPressed(GLFW_KEY_LEFT_SHIFT))
-            velocity.y -= 1.0f;
+        if (TT::Keyboard::isPressed(GLFW_KEY_SPACE)) velocity.y += 1.0f;
+        if (TT::Keyboard::isPressed(GLFW_KEY_LEFT_SHIFT))velocity.y -= 1.0f;
     }
 
     if (rawOnGround) {
@@ -233,15 +235,15 @@ void RTX::Player::update(TT::Time time) {
         velocity.z /= horizontalLength;
 
         if (onGround) {
-            if (stepTimer == 0.0f) {
-                stepSoundSource.setSound(stepSounds[rand() % 3]);
-                stepSoundSource.play(1.5f, 1.0f, false);
-            }
+            if (stepTimer == 0.0f)
+                stepSoundSource.play(stepSounds[rand() % 3], 1.5f, 1.0f, false);
 
             stepTimer += stepSpeed * time.getDelta();
             if (stepTimer >= 1.0f / walkSpeed) stepTimer = 0.0f;
         }
         else stepTimer = 0.0f;
+
+        Renderer::resetDenoiser();
     }
 
     std::vector<std::string> collidedTags;
@@ -267,7 +269,7 @@ void RTX::Player::update(TT::Time time) {
             velocity.y = onJumpPad ? 50.0f : 0.0f;
 
             if (!onJumpPad) rawOnGround = true;
-            else blyaSoundSource.play(0.8f, 1.0f, false);
+            else blyaSoundSource.play(blyaSound, 0.8f, 1.0f, false);
         }
     }
 
@@ -282,11 +284,28 @@ void RTX::Player::update(TT::Time time) {
     if (std::find(collidedTags.begin(), collidedTags.end(), "laser") != collidedTags.end())
         respawn();
 
-    rotation.x -= TT::Mouse::getVelocity().y * rotateSpeed;
-    rotation.x = fmax(fmin(rotation.x, 89.99f), -89.99f);
+    if (abs(velocity.y) > 0.1f) Renderer::resetDenoiser();
 
-    rotation.y += TT::Mouse::getVelocity().x * rotateSpeed;
-    rotation.y -= floor(rotation.y / 360.0f) * 360.0f;
+    glm::vec3 lastRotation = glm::vec3(rotation);
+    if (!cinematicMode) {
+        rotation.x -= TT::Mouse::getVelocity().y * rotateSpeed;
+        rotation.x = fmax(fmin(rotation.x, 89.99f), -89.99f);
+
+        rotation.y += TT::Mouse::getVelocity().x * rotateSpeed;
+        rotation.y -= floor(rotation.y / 360.0f) * 360.0f;
+    }
+    else {
+        rawRotation.x -= TT::Mouse::getVelocity().y * rotateSpeed;
+        rawRotation.x = fmax(fmin(rawRotation.x, 89.99f), -89.99f);
+        rawRotation.y += TT::Mouse::getVelocity().x * rotateSpeed;
+
+        rotation.x += (cinematicSharpness * time.getDelta()) * (rawRotation.x - rotation.x);
+        rotation.y += (cinematicSharpness * time.getDelta()) * (rawRotation.y - rotation.y);
+        rotation.z += (cinematicSharpness * time.getDelta()) * (rawRotation.z - rotation.z);
+    }
+
+    if(abs(lastRotation.x - rotation.x) > 0.01f || abs(lastRotation.y - rotation.y) > 0.01f || abs(lastRotation.z - rotation.z) > 0.01f)
+        Renderer::resetDenoiser();
 }
 void RTX::Player::clear() {
     TT::AudioSystem::clear(stepSounds[0]);
@@ -329,28 +348,25 @@ void RTX::Camera::initialize(float dofBlurSize, float dofFocusDistance, float fo
     Camera::fov = fov;
 }
 
-int RTX::Denoiser::denoiseFrame = 1;
+TT::ShaderProgram* RTX::Renderer::raytraceProgram = NULL;
+TT::ShaderProgram* RTX::Renderer::screenProgram = NULL;
 
-TT::ShaderProgram* RTX::Denoiser::raytraceProgram = NULL;
-TT::ShaderProgram* RTX::Denoiser::screenProgram = NULL;
+TT::FrameBuffer* RTX::Renderer::firstFrameBuffer = NULL;
+TT::FrameBuffer* RTX::Renderer::secondFrameBuffer = NULL;
 
-TT::FrameBuffer* RTX::Denoiser::lastFrameBuffer = NULL;
-TT::FrameBuffer* RTX::Denoiser::frameBuffer = NULL;
+int RTX::Renderer::denoiserStep = 0;
 
-void RTX::Denoiser::initialize(glm::uvec2 size) {
+void RTX::Renderer::initialize(glm::uvec2 size) {
     resize(size);
     reloadShaders();
 }
-void RTX::Denoiser::resize(glm::uvec2 size) {
+void RTX::Renderer::resize(glm::uvec2 size) {
     clearFrameBuffers();
 
-    if (frameBuffer) delete frameBuffer;
-    if (lastFrameBuffer) delete lastFrameBuffer;
-
-    frameBuffer = new TT::FrameBuffer(size.x, size.y);
-    lastFrameBuffer = new TT::FrameBuffer(size.x, size.y);
+    firstFrameBuffer = new TT::FrameBuffer(size.x, size.y);
+    secondFrameBuffer = new TT::FrameBuffer(size.x, size.y);
 }
-void RTX::Denoiser::reloadShaders() {
+void RTX::Renderer::reloadShaders() {
     clearShaders();
 
     if (raytraceProgram) delete raytraceProgram;
@@ -366,20 +382,30 @@ void RTX::Denoiser::reloadShaders() {
     screenProgram->addShader(TT::Shader("res/shaders/screen.frag", GL_FRAGMENT_SHADER));
     screenProgram->compile();
 }
+void RTX::Renderer::resetDenoiser() {
+    denoiserStep = 1;
+}
 
-void RTX::Denoiser::render(TT::Time time, Player player) {
-    getRenderFrame()->load();
+void RTX::Renderer::render(TT::Time time, Player player) {
+    bool denoiserSwapState = denoiserStep % 2 == 0;
+
+    TT::FrameBuffer* renderFrameBuffer = denoiserSwapState ? firstFrameBuffer : secondFrameBuffer;
+    TT::FrameBuffer* backFrameBuffer = denoiserSwapState ? secondFrameBuffer : firstFrameBuffer;
+
+    renderFrameBuffer->load();
 
     raytraceProgram->load();
     raytraceProgram->setUniform("playerPosition", player.getEyePosition());
     raytraceProgram->setUniform("playerRotation", player.rotation);
     raytraceProgram->setUniform("sunDirection", glm::vec3(World::sunDirection[0], World::sunDirection[1], World::sunDirection[2]));
     raytraceProgram->setUniform("screenResolution", TT::Window::getSize());
-    raytraceProgram->setUniform("denoiseFactor", 1.0f / (float)denoiseFrame);
-    raytraceProgram->setUniform("lastFrameSampler", 0);
+    raytraceProgram->setUniform("random", time.getTime());
+    raytraceProgram->setUniform("backFrameFactor", 1.0f / denoiserStep);
+    raytraceProgram->setUniform("backFrameSampler", 0);
     raytraceProgram->setUniform("skyboxSampler", 1);
     raytraceProgram->setUniform("albedoSampler", 2);
     raytraceProgram->setUniform("normalSampler", 3);
+    raytraceProgram->setUniform("dofFocusDistance", Camera::dofFocusDistance);
     raytraceProgram->setUniform("dofBlurSize", Camera::dofBlurSize);
     raytraceProgram->setUniform("fov", Camera::fov);
 
@@ -415,7 +441,7 @@ void RTX::Denoiser::render(TT::Time time, Player player) {
     }
 
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, getBackFrame()->getTexture());
+    glBindTexture(GL_TEXTURE_2D, backFrameBuffer->getTexture());
 
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, World::map->skyboxTexture);
@@ -437,10 +463,10 @@ void RTX::Denoiser::render(TT::Time time, Player player) {
 
     screenProgram->load();
     screenProgram->setUniform("screenResolution", TT::Window::getSize());
-    screenProgram->setUniform("firstFrame", denoiseFrame == 1);
+    screenProgram->setUniform("textureResolution", glm::vec2(renderFrameBuffer->getWidth(), renderFrameBuffer->getHeight()));
 
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, getRenderFrame()->getTexture());
+    glBindTexture(GL_TEXTURE_2D, renderFrameBuffer->getTexture());
 
     glBegin(GL_QUADS);
     glVertex2i(-1, -1);
@@ -454,32 +480,31 @@ void RTX::Denoiser::render(TT::Time time, Player player) {
 
     glBindTexture(GL_TEXTURE_2D, 0);
 
-    denoiseFrame++;
+    denoiserStep++;
 }
-void RTX::Denoiser::reset() {
-    denoiseFrame = 1;
-}
-void RTX::Denoiser::clear() {
+void RTX::Renderer::clear() {
     clearShaders();
 }
-void RTX::Denoiser::clearShaders() {
-    denoiseFrame = 1;
-
+void RTX::Renderer::clearShaders() {
     if(raytraceProgram) raytraceProgram->clear();
     if(screenProgram) screenProgram->clear();
 }
-void RTX::Denoiser::clearFrameBuffers() {
-    denoiseFrame = 1;
-
-    if(lastFrameBuffer) lastFrameBuffer->clear();
-    if(frameBuffer) frameBuffer->clear();
+void RTX::Renderer::clearFrameBuffers() {
+    if (firstFrameBuffer) {
+        firstFrameBuffer->clear();
+        delete firstFrameBuffer;
+    }
+    if (secondFrameBuffer) {
+        secondFrameBuffer->clear();
+        delete secondFrameBuffer;
+    }
 }
 
-TT::FrameBuffer* RTX::Denoiser::getRenderFrame() {
-    return denoiseFrame % 2 ? frameBuffer : lastFrameBuffer;
+TT::FrameBuffer* RTX::Renderer::getFirstFrameBuffer() {
+    return firstFrameBuffer;
 }
-TT::FrameBuffer* RTX::Denoiser::getBackFrame() {
-    return !(denoiseFrame % 2) ? frameBuffer : lastFrameBuffer;
+TT::FrameBuffer* RTX::Renderer::getSecondFrameBuffer() {
+    return secondFrameBuffer;
 }
 
 bool RTX::DebugHud::frameScaleMode = false;
@@ -490,31 +515,40 @@ void RTX::DebugHud::initialize() {
     frameScale = 1;
 }
 void RTX::DebugHud::render(Player& player) {
-    bool resetDenoiser = false;
-
-    ImGui::Begin("Shader Editor");
+    ImGui::Begin("Settings");
 
     ImGui::Text("Player");
     ImGui::DragFloat("Walk Speed", &player.walkSpeed, 0.005f, 0.005f, 20.0f);
     ImGui::DragFloat("Rotate Speed", &player.rotateSpeed, 0.005f, 0.005f, 0.2f);
     ImGui::DragFloat("Jump Height", &player.jumpHeight, 0.005f, 0.005f, 20.0f);
+    
     ImGui::Checkbox("Fly Mode", &player.flyMode);
+
+    ImGui::Separator();
+    ImGui::Text("Cinematic");
+    ImGui::Checkbox("Cinematic Mode", &player.cinematicMode);
+    ImGui::DragFloat("Cinematic Sharpness", &player.cinematicSharpness, 0.005f, 0.005f, 100.0f);
 
     ImGui::Separator();
     ImGui::Text("World");
 
-    if (ImGui::DragFloat3("Sun Direction", World::sunDirection, 0.005f, -1.0f, 1.0f)) resetDenoiser = true;
+    if (ImGui::DragFloat3("Sun Direction", World::sunDirection, 0.005f, -1.0f, 1.0f))
+        Renderer::resetDenoiser();
     ImGui::DragFloat("Gravity", &World::gravity, 0.005f, 0.005f, 20.0f);
 
     ImGui::Separator();
     ImGui::Text("Camera");
-    if (ImGui::DragFloat("Eye Height", &player.eyeHeight, 0.005f, 0.1f, 0.9f)) resetDenoiser = true;
+    if (ImGui::DragFloat("Eye Height", &player.eyeHeight, 0.005f, 0.1f, 0.9f))
+        Renderer::resetDenoiser();
 
     ImGui::Spacing();
 
-    if (ImGui::DragFloat("DoF Focus Distance", &Camera::dofFocusDistance, 0.005f, 0.1f, 100.0f)) resetDenoiser = true;
-    if (ImGui::DragFloat("DoF Blur Size", &Camera::dofBlurSize, 0.0005f, 0.0f, 0.9f)) resetDenoiser = true;
-    if (ImGui::DragFloat("Fov", &Camera::fov, 1.0f, 20.0f, 179.0f)) resetDenoiser = true;
+    if (ImGui::DragFloat("DoF Focus Distance", &Camera::dofFocusDistance, 0.005f, 0.1f, 100.0f))
+        Renderer::resetDenoiser();
+    if (ImGui::DragFloat("DoF Blur Size", &Camera::dofBlurSize, 0.0005f, 0.0f, 0.9f))
+        Renderer::resetDenoiser();
+    if (ImGui::DragFloat("Fov", &Camera::fov, 1.0f, 20.0f, 179.0f))
+        Renderer::resetDenoiser();
 
     ImGui::Separator();
     ImGui::Text("Graphics");
@@ -523,7 +557,7 @@ void RTX::DebugHud::render(Player& player) {
         frameScaleMode = !frameScaleMode;
         frameScale = 1;
 
-        resetDenoiser = true;
+        Renderer::resetDenoiser();
     }
 
     ImGui::SameLine();
@@ -534,14 +568,13 @@ void RTX::DebugHud::render(Player& player) {
         if (frameScaleMode) size *= frameScale;
         else size /= frameScale;
 
-        Denoiser::resize(glm::ivec2((int)size.x, (int)size.y));
+        Renderer::resize(glm::ivec2((int)size.x, (int)size.y));
+        Renderer::resetDenoiser();
     }
 
-    if (ImGui::Button("Reload Shaders")) Denoiser::reloadShaders();
+    if (ImGui::Button("Reload Shaders")) Renderer::reloadShaders();
 
     ImGui::End();
-
-    if (resetDenoiser) Denoiser::reset();
 }
 
 bool RTX::DebugHud::getFrameScaleMode() {

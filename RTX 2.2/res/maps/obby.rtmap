@@ -1,22 +1,23 @@
-///////////////////////////////////////////////
 Info
+///////////////////////////////////////////////
 albedo.png/normal.png/skybox.png
 
 Materials
+///////////////////////////////////////////////
 
 // White Floor Material
-1,1,1/0.0/0/0/0,0,0.5,0.5/false
-// Yellow Floor Material
+1,1,1/0/0/0/0,0,0.5,0.5/false
+// Yellow Floor Material [0]
 0.722,0.8,0.15/0.8/0/0/0,0,0.5,0.5/false
-// Laser Material
+// Laser Material [1]
 10,0.1,0.1/0/0/0/0,0,0,0/true
-// Jump Pad Material
+// Jump Pad Material [2]
 0,50,0/0/0/0/0,0,0,0/true
-// Sphere Material
+// Sphere Material [3]
 0.5,0.7,1/0.01/0.05/0.3/0,0,0,0/false
 
-///////////////////////////////////////////////
 Boxes
+///////////////////////////////////////////////
 
 // Checkpoint Platforms
 -3,0,-3/6,1,6/0/floor
@@ -41,8 +42,8 @@ Boxes
 // Jump Pad
 -42,-5,14/5.472,1,5.928/3/jump_pad
 
-///////////////////////////////////////////////
 Spheres
+///////////////////////////////////////////////
 
 // 3rd Level Spheres
 -59,11,17/2/4/floor

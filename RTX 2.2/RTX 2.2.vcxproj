@@ -139,6 +139,7 @@
     <ClCompile Include="src\engine\graphics.cpp" />
     <ClCompile Include="src\engine\input.cpp" />
     <ClCompile Include="src\engine\math.cpp" />
+    <ClCompile Include="src\example.cpp" />
     <ClCompile Include="src\imgui\imgui.cpp" />
     <ClCompile Include="src\imgui\imgui_draw.cpp" />
     <ClCompile Include="src\imgui\imgui_impl_glfw.cpp" />

@@ -57,6 +57,9 @@
     <ClCompile Include="src\stb\stb_vorbis.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\example.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\engine\graphics.h">

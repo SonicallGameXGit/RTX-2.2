@@ -1,15 +1,16 @@
 #version 330
 #define PI 3.1415926536
 
-#define SUN_COLOR vec3(1.0, 0.4, 0.2) * 30.0 * 1.0
-#define SUN_RADIUS 0.007
+#define SUN_COLOR vec3(1.0, 0.7, 0.4) * 300.0
+#define SUN_RADIUS 0.001
+
 #define SKY_BRIGHTNESS 0.8
 
 #define NULL_MATERIAL Material(vec3(0.0), 0.0, 0.0, 0.0, vec4(0.0), false)
 #define NULL_HIT_INFO HitInfo(false, 0.0, 0.0, vec3(0.0), vec2(0.0), NULL_MATERIAL)
 
-#define BOXES 13
-#define SPHERES 4
+#define BOXES 7
+#define SPHERES 2
 
 in vec2 uv;
 
@@ -19,13 +20,13 @@ uniform vec3 sunDirection;
 
 uniform vec2 screenResolution;
 
-uniform sampler2D lastFrameSampler;
-uniform sampler2D skyboxSampler;
+uniform sampler2D backFrameSampler;
 uniform sampler2D albedoSampler;
 uniform sampler2D normalSampler;
+uniform sampler2D skyboxSampler;
 
-uniform float randomOffset;
-uniform float denoiseFactor;
+uniform float random;
+uniform float backFrameFactor;
 
 uniform float dofFocusDistance;
 uniform float dofBlurSize;
@@ -85,7 +86,7 @@ mat2 rotate(float angle) {
 }
 
 float hash(inout float seed) { 
-	return fract(sin(dot(vec2(seed += 0.8), vec2(12.9898, 4.1414))) * 43758.5453);
+	return fract(sin(dot(vec2(seed += 0.1), vec2(12.9898, 4.1414))) * 43758.5453);
 }
 
 vec2 hash2(inout float seed) {
@@ -184,11 +185,12 @@ HitInfo rayCast(Ray ray) {
 vec3 rayTrace(Ray ray, inout float seed) {
     vec3 color = vec3(1.0);
 
-    for(int i = 0; i < 32; i++) {
+    for(int i = 0; i < 64; i++) {
         HitInfo hitInfo = rayCast(ray);
         if(!hitInfo.hit) return color * sky(ray);
 
         color *= hitInfo.material.color;
+
         if(length(hitInfo.uv) > 0.0) {
             color *= texture2D(albedoSampler, hitInfo.uv).rgb;
 
@@ -197,71 +199,75 @@ vec3 rayTrace(Ray ray, inout float seed) {
             tangent.yx *= rotate(-90.0);
 
             vec3 bitangent = hitInfo.normal;
-            bitangent.yz *= rotate(90.0);
+            bitangent.yz *= rotate(-90.0);
 
             mat3 tangentMatrix = mat3(
                 tangent.x, bitangent.x, hitInfo.normal.x,
-                tangent.y, bitangent.y, hitInfo.normal.y,
+                tangent.y, bitangent.y, -hitInfo.normal.y,
                 tangent.z, bitangent.z, hitInfo.normal.z
             );
 
-            hitInfo.normal = normalize(texturedNormal * tangentMatrix);
+            hitInfo.normal = normalize(-texturedNormal * tangentMatrix);
         }
 
         if(hitInfo.material.emissive) return color;
         
         float fresnel = pow(clamp(1.0 - dot(hitInfo.normal, -ray.direction), 0.0, 1.0), 1.0 + hitInfo.material.glass);
         float reflectChance = hash(seed) * (fresnel + hitInfo.material.glassReflect);
+        float sunDirectChance = hash(seed);
         
         if(hitInfo.material.glass > 0.0 && reflectChance < 0.5) {
             ray.position += ray.direction * (hitInfo.farDistance - 0.001);
         
             vec3 refracted = refract(ray.direction, hitInfo.normal, 1.0 - hitInfo.material.glass);
-            ray.direction = hash3(seed) * 2.0 - 1.0;
+            ray.direction = randomSphereDirection(seed);
             ray.direction *= sign(dot(ray.direction, -hitInfo.normal));
             ray.direction = mix(refracted, ray.direction, hitInfo.material.diffuse);
         } else {
             ray.position += ray.direction * (hitInfo.distance - 0.001);
             
             vec3 reflected = reflect(ray.direction, hitInfo.normal);
-            ray.direction = hash3(seed) * 2.0 - 1.0;
+            ray.direction = randomSphereDirection(seed);
             ray.direction *= sign(dot(ray.direction, hitInfo.normal));
             ray.direction = mix(reflected, ray.direction, hitInfo.material.diffuse);
         }
+
+        ray.direction = normalize(ray.direction);
     }
 
     return vec3(0.0);
 }
 
-vec3 denoise(Ray ray, inout float seed) {
+vec3 render(Ray ray, inout float seed, in int raysPerPixel) {
     vec3 color;
-    for(int i = 0; i < 3; i++)
+    for(int i = 0; i < raysPerPixel; i++) {
         color += rayTrace(ray, seed);
+        seed += 394.392 / (float(i) + 1.0);
+    }
 
-    return clamp(color / 3.0, vec3(0.0), vec3(1.0));
+    return clamp(color / float(raysPerPixel), vec3(0.0), vec3(1.0));
 }
 
 out vec4 fragColor;
 
 void main() {
-    float seed = (uv.x / (screenResolution.x / screenResolution.y) + uv.y) * 392.38 + 3.43121412313 + denoiseFactor;
+    float seed = (uv.x / (screenResolution.x / screenResolution.y) + uv.y) * 492.38 + random + (playerRotation.x + playerRotation.y + playerRotation.z) / 2.0;
 
     Ray ray = Ray(vec3(0.0), normalize(vec3(vec2(uv.x * (screenResolution.x / screenResolution.y), uv.y) * tan(radians(fov) / 2.0), 1.0)));
 
     vec2 randomPoint = randomSphereDirection(seed).xy * dofBlurSize;
 
-    Ray focusRay = Ray(playerPosition, vec3(randomPoint * 0.01, 1.0));
+    Ray focusRay = Ray(playerPosition, vec3(0.0, 0.0, 1.0));
     focusRay.direction.yz *= rotate(-playerRotation.x);
     focusRay.direction.xz *= rotate(-playerRotation.y);
     focusRay.direction.zy *= rotate(-playerRotation.z);
-
+    
     HitInfo focusHitInfo = rayCast(focusRay);
 
-    vec3 focalPoint = ray.direction * (focusHitInfo.hit ? focusHitInfo.distance : 10.0);
-    vec3 finalDirection = normalize(focalPoint - vec3(randomPoint, 0.0));
+    vec3 focusPoint = ray.direction * (focusHitInfo.hit ? focusHitInfo.distance : dofFocusDistance);
 
-    ray.position = vec3(randomPoint, 0.0);
-    ray.direction = finalDirection;
+    ray.position = vec3(randomPoint * (focusHitInfo.hit ? focusHitInfo.distance : dofFocusDistance), 0.0);
+    ray.direction = normalize(focusPoint - ray.position);
 
     ray.position.yx *= rotate(-playerRotation.z);
     ray.position.yz *= rotate(-playerRotation.x);
@@ -273,9 +279,9 @@ void main() {
 
     ray.position += playerPosition;
 
-    fragColor = vec4(denoise(ray, seed), 1.0);
-
-    vec4 lastFrameColor = texture2D(lastFrameSampler, uv / 2.0 + 0.5);
-    if(lastFrameColor.a != 0.0)
-        fragColor = mix(lastFrameColor, fragColor, denoiseFactor);
+    fragColor = vec4(render(ray, seed, 128), 1.0);
+    
+    vec4 backFrameColor = texture2D(backFrameSampler, uv / 2.0 + 0.5);
+    if(backFrameColor.a > 0.0)
+        fragColor.rgb = mix(backFrameColor.rgb, fragColor.rgb, backFrameFactor);
 }

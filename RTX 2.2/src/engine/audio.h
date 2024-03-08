@@ -21,11 +21,8 @@ namespace TT {
 	class SoundSource {
 	public:
 		SoundSource();
-		SoundSource(ALuint sound);
 
-		void setSound(ALuint sound) const;
-
-		void play(float volume, float pitch, bool loop) const;
+		void play(ALuint sound, float volume, float pitch, bool loop) const;
 		void clear();
 
 		void pause() const;

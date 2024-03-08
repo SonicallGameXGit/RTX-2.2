@@ -1,0 +1,25 @@
+///////////////////////////////////////////////
+Info
+albedo_ob.png/normal_ob.png/skybox2.png
+
+Materials
+
+// Obsidian Material
+1,1,1/0.0/0/0/0,0,1,1/false
+// Red Light Material
+30,0.2,0.2/0/0/0/0,0,0,0/true
+// Blue Light Material
+0.2,0.2,30/0/0/0/0,0,0,0/true
+
+///////////////////////////////////////////////
+Boxes
+
+// Obsidians
+0,0,0/1,1,1/0/floor
+1,0,0/1,1,1/0/floor
+1,0,1/1,1,1/0/floor
+0,0,1/1,1,1/0/floor
+
+// Lights
+-2,20,-2/5,1,5/1/floor
+3,20,-2/5,1,5/2/floor

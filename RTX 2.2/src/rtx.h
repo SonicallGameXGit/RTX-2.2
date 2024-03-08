@@ -77,10 +77,10 @@ namespace RTX {
 
     class Player {
     public:
-        float walkSpeed, rotateSpeed, jumpHeight, eyeHeight;
-        glm::vec3 position, rotation, scale, velocity;
+        float walkSpeed, rotateSpeed, jumpHeight, eyeHeight, cinematicSharpness;
+        glm::vec3 position, rawRotation, rotation, scale, velocity;
 
-        bool flyMode;
+        bool flyMode, cinematicMode;
 
         Player(glm::vec3 position, glm::vec3 rotation, glm::vec3 scale);
 
@@ -111,25 +111,26 @@ namespace RTX {
         static void initialize(float dofBlurSize, float dofFocusDistance, float fov);
     };
 
-    class Denoiser {
+    class Renderer {
     public:
-        static int denoiseFrame;
-
         static void initialize(glm::uvec2 size);
         static void resize(glm::uvec2 size);
         static void reloadShaders();
 
         static void render(TT::Time time, Player player);
-        static void reset();
         static void clear();
         static void clearShaders();
         static void clearFrameBuffers();
 
-        static TT::FrameBuffer* getRenderFrame();
-        static TT::FrameBuffer* getBackFrame();
+        static TT::FrameBuffer* getFirstFrameBuffer();
+        static TT::FrameBuffer* getSecondFrameBuffer();
+
+        static void resetDenoiser();
     private:
         static TT::ShaderProgram *raytraceProgram, *screenProgram;
-        static TT::FrameBuffer *lastFrameBuffer, *frameBuffer;
+        static TT::FrameBuffer *firstFrameBuffer, *secondFrameBuffer;
+
+        static int denoiserStep;
     };
 
     class DebugHud {
